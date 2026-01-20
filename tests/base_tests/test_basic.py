@@ -1,6 +1,6 @@
 """Basic tests for DDP-PBT package"""
 
-import ddp_pbt
+from src import ddp_pbt
 
 
 def test_version():
