@@ -10,6 +10,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 import torch
 from torch.optim.lr_scheduler import LRScheduler
+from .state import State
+from .communication import Communication
 
 
 def validate_log_schema_entry(config: Dict[str, Any]) -> None:
@@ -166,8 +168,8 @@ class AbstractStrategy(LRScheduler, ABC):
     """
 
     def __init__(self,
-                 state,
-                 communication,
+                 state: State,
+                 communication: Communication,
                  config: Optional[Dict[str, Dict[str, Any]]] = None
                  ):
         """
@@ -351,11 +353,12 @@ class AbstractStrategy(LRScheduler, ABC):
         local_model_pytree = self._state.get_model_tensors()
         local_optimizer_pytree = self._state.get_optimizer_tensors()
 
-        # Phase 2: Gather world hyperparameters
+        # Phase 2: Gather world hyperparameters and metrics
         world_hyperparameters = self._communication.gather_pytree_list(local_hyperparams)
+        validation_metrics = self._communicate.gather_pytree_list(validation_metric)
 
         # Phase 3: Call abstract methods (concrete strategy implementations)
-        world_weights = self.score(validation_metric, self._communication)
+        world_weights = self.score(validation_metrics, self._communication)
 
         new_hyperparams = self.reduce_hyperparameters(
             world_weights, world_hyperparameters, self._communication
@@ -386,12 +389,12 @@ class AbstractStrategy(LRScheduler, ABC):
         return [group['lr'] for group in self.optimizer.param_groups]
 
     @abstractmethod
-    def score(self, validation_metric: float, communication) -> List[float]:
+    def score(self, validation_metrics: List[float], communication: Communication) -> List[float]:
         """
         Compute world weights from validation metric.
 
         Args:
-            validation_metric: Local worker's validation metric.
+            validation_metrics: validation metrics across all devices
             communication: Communication instance for gathering metrics.
 
         Returns:
@@ -424,7 +427,7 @@ class AbstractStrategy(LRScheduler, ABC):
         self,
         world_weights: List[float],
         model_pytree: Dict[str, torch.Tensor],
-        communication
+        communication: Communication
     ) -> Dict[str, torch.Tensor]:
         """
         Reduce model parameters across workers.
@@ -444,7 +447,7 @@ class AbstractStrategy(LRScheduler, ABC):
         self,
         world_weights: List[float],
         optimizer_pytree: Dict[str, torch.Tensor],
-        communication
+        communication: Communication
     ) -> Dict[str, torch.Tensor]:
         """
         Reduce optimizer state across workers.
