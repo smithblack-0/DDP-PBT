@@ -5,11 +5,10 @@ TopScoreStrategy selects the best-performing worker and perturbs their hyperpara
 Tests validate scoring logic, hyperparameter perturbation, and model/optimizer reduction.
 """
 
-import pytest
 import torch
 from unittest.mock import Mock
 
-from src.ddp_pbt.base.top_score_strategy import TopScoreStrategy, make_top_score_strategy
+from src.ddp_pbt.Strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
 from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
 
