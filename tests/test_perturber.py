@@ -8,9 +8,9 @@ Tests validate perturbation behavior for log/linear parameters and bounds clippi
 import random
 import pytest
 
-from src.ddp_pbt.base.perturber import Perturber # Dont be lazy claude. Rename permuter to perturber
-Permuter = Perturber  # Alias for test compatibility
-
+from src.ddp_pbt.base.perturber import Perturber
+# Deleted illegal alias claude. Go rename everything to perturber instead.
+# Stop being lazy.
 
 class TestPermuterSetupSchema:
     """Tests that setup_schema correctly configures perturbation behavior."""
