@@ -9,8 +9,8 @@ import random
 import pytest
 from unittest.mock import Mock
 
-from ddp_pbt.base.crossbreeder import Crossbreeder
-from ddp_pbt.base.perturber import Perturber as Permuter
+from src.ddp_pbt.base.crossbreeder import Crossbreeder
+from src.ddp_pbt.base.perturber import Perturber as Permuter
 
 
 class TestCrossbreederSetup:
