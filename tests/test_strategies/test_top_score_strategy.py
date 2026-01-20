@@ -181,3 +181,7 @@ class TestMakeTopScoreStrategyFactory:
 
         # Schema should be loaded
         assert strategy.schema == config
+
+# Note to claude: Hey, where are my integration tests? Lets make an AdamW, bind to it using linear on
+# on learning rate and log on weight decay, and step a few times, for a dumb simple model .
+# We need integration tests too.
