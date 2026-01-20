@@ -18,9 +18,9 @@ class TestCrossbreederSetup:
 
     def test_setup_schema_stores_reference(self):
         """Crossbreeder should store schema for blending operations."""
-        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.5)
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
-            "lr": {"type": "log", "std": 0.1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
         }
         crossbreeder.setup_schema(schema)
 
