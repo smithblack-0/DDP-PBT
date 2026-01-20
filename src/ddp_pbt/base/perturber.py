@@ -119,8 +119,7 @@ class Perturber:
 
         for hyperparameter_path, hyperparameters_list in values.items():
             if hyperparameter_path not in self._schema:
-                msg = (f"Insane state, contact maintainer: "
-                       f"Path {hyperparameter_path} wanted but not in schema")
+                msg = f"Path {hyperparameter_path} wanted but not in schema"
                 raise RuntimeError(msg)
 
             perturbed_values = []
