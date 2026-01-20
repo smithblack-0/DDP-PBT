@@ -298,7 +298,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 4. `crossbreed_hyperparameters(world_hyperparameters, parent_weights)` → returns Hyperparameter Values
    - Takes World Hyperparameters and parent World Weights
    - Interprets parent_weights to find 2 active indices
-   - Blends those two hyperparameter sets
+   - Blends those two hyperparameter sets with 50% each.
    - For log parameters: converts to log-space, blends, converts back
    - For linear parameters: blends directly
    - With mutation_rate probability: calls permuter on result
@@ -460,7 +460,7 @@ Each strategy implements the 4 abstract methods coherently. Dependencies are inj
 ---
 
 #### WeightedAverageStrategy
-**Dependencies**: Crossbreeder (injected, which has Permuter injected into it)
+**Dependencies**: Permuter
 
 **Implementation**:
 - `score(validation_metric, communication)`:
@@ -469,7 +469,8 @@ Each strategy implements the 4 abstract methods coherently. Dependencies are inj
   - Return World Weights (all non-zero)
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
-  - Call Crossbreeder.crossbreed_hyperparameters(world_hyperparameters, world_weights)
+  - Average hyperparameters together.
+  - Permute them.
   - Returns blended (possibly mutated) Hyperparameter Values
 
 - `reduce_models(world_weights, model_pytree, communication)`:
@@ -667,13 +668,6 @@ def make_top_score_strategy(optimizer, config={}) -> TopScoreStrategy:
 - Crossbreeder provides two operations: select parents, crossbreed hyperparameters
 - Testable in isolation
 - Injected into strategies that need them
-
-### Crossbreeding pattern
-- score() selects parents once → returns World Weights (filtered to parents)
-- reduce_hyperparameters() uses Crossbreeder to blend + mutate hyperparams based on World Weights
-- reduce_models() uses Communication.reduce_by_world_weights() to blend model tensors
-- reduce_optimizer() uses Communication.reduce_by_world_weights() to blend optimizer tensors
-- Selection is done once in score(), World Weights flow to all three reduce methods
 
 ### Why strategies have 4 methods not decomposed into separate objects
 - The 4 methods (score, reduce_hyperparameters, reduce_models, reduce_optimizer) are conceptually ONE algorithm
