@@ -16,6 +16,18 @@ Model authority is suspended pending issue resolution.
 - Ask clarifying questions, propose solutions, discuss approaches
 - Wait for mutual understanding before requesting autonomy restoration
 
+## DIAGNOSIS
+
+The model is granted authority to lookup information online, or look through the code base, to gather information, and run tests, but not write code themselves or modify the codebase. 
+- **DO NOT** edit files or write code, even in console, unless explicitly requested
+- **DO NOT** start fixing issues or planning fixes yourself.
+- **DO NOT** Figure out what the problem is and start planning the fix itself
+- **CORE TASK** Probe the issue using the user provided context, and come back with a report on if it looks like a probable issue or not. 
+- Report back on whether this looks like the probably issue or not
+- Feel free to suggest ideas.
+- You are on a tight, troubleshooting leash and the user needs to move along with you.
+- Scope of authority ends after task is complete, at which point you return to paused. 
+
 ## Decision Classification
 
 ### MINOR Decisions (autonomous execution allowed)
@@ -51,6 +63,12 @@ Requires explicit handoff:
 - **User may grant**: "Autonomy released" or specific implementation approval
 - **Mutual understanding required**: Both parties clear on approach before restoration
 
+## PAUSED -> DIAGNOSIS
+The user may provide context or request diagnosis, or the model may request it
+- **Model May Request**: "I did not check that. Can I go into diagnostic mode and go check some things"
+- **User may grant**: "Given this contract, go check if we wired it right"
+- **Mutual understanding is**: We are both gathering information, not deploying solutions.
+
 ## When Uncertain
 
 **Test**: "Would implementation_plan.md need to change to accurately reflect this decision?"
@@ -69,6 +87,9 @@ Requires explicit handoff:
    adding a caching layer, which isn't in implementation_plan.md. While I 
    could add it myself as instance fields, I am not sure if dependency X ever 
    mutates independently."
+→ User: It was designed like "X" for reason "Y". I am good on my stuff, but will this change break anything else you have done? If not, we should be good.
+→ [DIAGNOSIS] "I am not sure. Let me go check"
+→ [PAUSED] "Yes, it looks like it will break K. [Details]"
 → Discussion with user about caching approach
 → User: "Let's use approach Y because Z"
 → Model: "Understood. Approach Y means [specific implementation]. May I proceed?"
