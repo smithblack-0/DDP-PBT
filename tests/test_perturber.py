@@ -145,10 +145,10 @@ class TestPermuterLogPerturbation:
             assert result["lr"][0] <= 1e-1
 
     def test_log_without_bounds(self):
-        """Log parameters without bounds should perturb freely in log-space."""
+        """Log parameters without max bound should perturb freely in log-space."""
         permuter = Permuter()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
         }
         permuter.setup_schema(schema)
 
@@ -184,7 +184,7 @@ class TestPermuterPerElementIndependence:
         """Each element in a per-group log hyperparameter list should get independent random draws."""
         permuter = Permuter()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "shared": False}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": False}
         }
         permuter.setup_schema(schema)
 
@@ -238,7 +238,7 @@ class TestPermuterMultipleHyperparameters:
         """Permuter should only perturb parameters in the schema."""
         permuter = Permuter()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
         }
         permuter.setup_schema(schema)
 
@@ -267,7 +267,7 @@ class TestPermuterEdgeCases:
         """Shared hyperparameters (length-1 list) should work correctly."""
         permuter = Permuter()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
         }
         permuter.setup_schema(schema)
 
