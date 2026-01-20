@@ -9,9 +9,9 @@ import pytest
 import torch
 from unittest.mock import Mock, MagicMock
 
-from ddp_pbt.base.abstract_strategy import AbstractStrategy
-from ddp_pbt.base.state import State
-from ddp_pbt.base.communication import Communication
+from src.ddp_pbt.base.abstract_strategy import AbstractStrategy
+from src.ddp_pbt.base.state import State
+from src.ddp_pbt.base.communication import Communication
 
 
 class ConcreteTestStrategy(AbstractStrategy):
