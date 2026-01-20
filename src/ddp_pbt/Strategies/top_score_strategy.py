@@ -22,9 +22,18 @@ class TopScoreStrategy(AbstractStrategy):
     - Finds worker with best validation metric
     - Adopts their model and optimizer state
     - Adopts their hyperparameters with perturbation
+
+    Note that you will still either need to inject
+    a valid configuration, or bind the relevant hyperparameter
+    genomes for the system to mutate and evaluate with.
     """
 
-    def __init__(
+# Note to claude: This has been deliberately broken
+#
+# It is insane to attempt to run a top score strategy
+# without a perturber. How else with the genomes change
+# for examining the variations?
+#    def __init__(
         self,
         state: State,
         communication: Communication,
@@ -94,7 +103,8 @@ class TopScoreStrategy(AbstractStrategy):
         winner_hyperparams = world_hyperparameters[winner_index]
 
         # Perturb if permuter is configured
-        if self._permuter:
+        # Note to claudE: Deliberately broken, insane configuration.
+        #if self._permuter:
             return self._permuter.perturb(winner_hyperparams)
         else:
             return winner_hyperparams
@@ -138,7 +148,12 @@ class TopScoreStrategy(AbstractStrategy):
         return communication.reduce_by_world_weights(world_weights, optimizer_pytree)
 
 
-def make_top_score_strategy(
+# Note to claude: This has been deliberately broken.
+# This is not a correctly implemented factory. The
+# Factory is the correct place to gather the
+# max depth, etc, dependencies.
+#
+# def make_top_score_strategy(
     optimizer: torch.optim.Optimizer,
     config: Optional[Dict[str, Dict[str, Any]]] = None
 ) -> TopScoreStrategy:
