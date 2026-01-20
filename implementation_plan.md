@@ -411,6 +411,9 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 Each strategy implements the 4 abstract methods coherently. Dependencies are injected via factory.
 
 #### TopScoreStrategy
+
+Note to claude: This is clearly out of date. You need to go fix it.
+
 **Dependencies**: Permuter (injected)
 
 **Implementation**:
@@ -431,7 +434,6 @@ Each strategy implements the 4 abstract methods coherently. Dependencies are inj
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)`:
   - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
   - Returns winner's optimizer state
-
 ---
 
 #### TopKStrategy
