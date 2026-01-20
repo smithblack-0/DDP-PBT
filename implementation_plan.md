@@ -347,13 +347,14 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 ---
 
 ### 5. AbstractStrategy
-**Responsibility**: Schema storage, configuration loading, and round-end orchestration
+**Responsibility**: Schema storage, configuration loading, and round-end orchestration.
 
 **Why needed**:
 - Central owner of the Schema - builds it through configuration methods
 - Orchestrates the round-end flow: extracts data via State, gathers distributed data via Communication, calls strategy methods, injects results back via State
 - Defines the contract that all strategies must implement
 - Provides schedule interface (state_dict, optimizer property)
+- It is a torch schedule. 
 
 **What it holds**:
 - **State** (injected) - used to extract/inject optimizer and model data

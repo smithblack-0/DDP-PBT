@@ -8,7 +8,7 @@ Uses leaf-by-leaf operations for memory efficiency.
 import torch
 import torch.distributed as dist
 from typing import Dict, List, Any
-from utilities import PyTree
+from ddp_pbt.base.utilities import PyTree
 
 class Communication:
     """
@@ -81,13 +81,14 @@ class Communication:
                 active_worlds = active_worlds.to(device=tensor.device)
 
             # Primary communication, then pruning down to live worlds
-            receive_buffer = torch.stack([torch.zeros_like(tensor)]*world_size)
-            dist.all_gather_into_tensor(receive_buffer, tensor)
-            receive_buffer = receive_buffer[active_worlds]
+            communication_buffer = [torch.empty_like(tensor) for _ in range(world_size)]
+            dist.all_gather(communication_buffer, tensor)
+            communication_buffer = torch.stack(communication_buffer, dim=0)
+            active_buffer = communication_buffer[active_worlds]
 
             # Weighted average and storage
-            receive_buffer = receive_buffer.movedim(0, -1)
-            weighted_buffer = receive_buffer * world_weights
+            active_buffer = active_buffer.movedim(0, -1)
+            weighted_buffer = active_buffer * world_weights
             result = torch.sum(weighted_buffer, dim=-1)
             output_tree[path] = result
 

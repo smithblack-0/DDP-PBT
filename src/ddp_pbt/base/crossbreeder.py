@@ -9,6 +9,36 @@ import math
 from typing import Dict, List, Any, Optional
 
 
+def _blend_log_elements(elements: List[float], weights: List[float]) -> float:
+    """
+    Blend elements in log-space with given weights.
+
+    Args:
+        elements: List of values to blend.
+        weights: List of weights (must sum to 1.0).
+
+    Returns:
+        Blended value.
+    """
+    log_elements = [math.log(e) for e in elements]
+    blended_log = sum(w * le for w, le in zip(weights, log_elements))
+    return math.exp(blended_log)
+
+
+def _blend_linear_elements(elements: List[float], weights: List[float]) -> float:
+    """
+    Blend elements in linear-space with given weights.
+
+    Args:
+        elements: List of values to blend.
+        weights: List of weights (must sum to 1.0).
+
+    Returns:
+        Blended value.
+    """
+    return sum(w * e for w, e in zip(weights, elements))
+
+
 class Crossbreeder:
     """
     Handles parent selection and hyperparameter crossbreeding with probabilistic mutation.
@@ -73,15 +103,20 @@ class Crossbreeder:
         indexed_weights.sort(key=lambda x: x[1], reverse=True)
 
         # Get top parent_pool_depth workers
-        pool_size = min(self._parent_pool_depth, len(world_weights))
-        top_pool = indexed_weights[:pool_size]
+        # Validate we have enough workers
+        if len(world_weights) < 2:
+            raise ValueError(
+                f"Cannot crossbreed with less than 2 workers, got {len(world_weights)}"
+            )
+        if self._parent_pool_depth > len(world_weights):
+            raise ValueError(
+                f"parent_pool_depth ({self._parent_pool_depth}) cannot exceed world_size ({len(world_weights)})"
+            )
+
+        top_pool = indexed_weights[:self._parent_pool_depth]
 
         # Randomly select 2 parents from pool
-        if len(top_pool) < 2:
-            # Edge case: not enough workers, use what we have
-            selected = top_pool
-        else:
-            selected = random.sample(top_pool, 2)
+        selected = random.sample(top_pool, 2)
 
         # Build filtered weights with only selected parents
         result_weights = [0.0] * len(world_weights)
@@ -116,15 +151,16 @@ class Crossbreeder:
         if self._schema is None:
             raise RuntimeError("Must call setup_schema before crossbreed_hyperparameters")
 
-        if not world_hyperparameters or not self._schema:
+        if not world_hyperparameters:
             return {}
 
         # Extract non-zero parent indices and weights
         parents = [(i, w) for i, w in enumerate(parent_weights) if w > 0]
 
         if len(parents) == 0:
-            # Edge case: no parents selected, return empty
-            return {}
+            raise ValueError("No parents selected (all weights are zero)")
+        if len(parents) != 2:
+            raise ValueError(f"Expected exactly 2 parents, got {len(parents)}")
 
         # Blend each hyperparameter
         result = {}
@@ -146,15 +182,11 @@ class Crossbreeder:
                 # Extract element from each parent
                 elements = [pv[elem_idx] for pv in parent_values]
 
-                # Blend based on type
+                # Blend based on type using helper functions
                 if param_type == "log":
-                    # Log-space blending
-                    log_elements = [math.log(e) for e in elements]
-                    blended_log = sum(w * le for w, le in zip(parent_weights_list, log_elements))
-                    blended = math.exp(blended_log)
+                    blended = _blend_log_elements(elements, parent_weights_list)
                 elif param_type == "linear":
-                    # Linear-space blending
-                    blended = sum(w * e for w, e in zip(parent_weights_list, elements))
+                    blended = _blend_linear_elements(elements, parent_weights_list)
                 else:
                     raise ValueError(f"Unknown parameter type: {param_type}")
 
@@ -163,7 +195,11 @@ class Crossbreeder:
             result[param_name] = blended_values
 
         # Probabilistic mutation
-        if self._permuter is not None and random.random() < self._mutation_rate:
+        if random.random() < self._mutation_rate:
+            if self._permuter is None:
+                raise RuntimeError(
+                    "Permuter not configured but mutation_rate > 0. Call setup_permuter()"
+                )
             result = self._permuter.perturb(result)
 
         return result

@@ -8,7 +8,8 @@ Tests validate perturbation behavior for log/linear parameters and bounds clippi
 import random
 import pytest
 
-from ddp_pbt.base.permuter import Permuter
+from src.ddp_pbt.base.perturber import Perturber # Dont be lazy claude. Rename permuter to perturber
+Permuter = Perturber  # Alias for test compatibility
 
 
 class TestPermuterSetupSchema:

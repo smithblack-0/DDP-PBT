@@ -84,14 +84,14 @@ class TestAbstractStrategyConfiguration:
         strategy = ConcreteTestStrategy(state, communication)
 
         # Bind linear hyperparameter
-        strategy.bind_linear_hyperparameter("weight_decay", std=0.001, min=0, max=0.1, shared=False)
+        strategy.bind_linear_hyperparameter("weight_decay", std=0.001, min=0.0, max=0.1, shared=False)
 
         # Verify schema was built
         schema = strategy.state_dict()
         assert "weight_decay" in schema
         assert schema["weight_decay"]["type"] == "linear"
         assert schema["weight_decay"]["std"] == 0.001
-        assert schema["weight_decay"]["min"] == 0
+        assert schema["weight_decay"]["min"] == 0.0
         assert schema["weight_decay"]["max"] == 0.1
         assert schema["weight_decay"]["shared"] is False
 
@@ -105,7 +105,7 @@ class TestAbstractStrategyConfiguration:
         strategy = ConcreteTestStrategy(state, communication)
 
         # Bind both
-        strategy.bind_log_hyperparameter("lr", std=0.1)
+        strategy.bind_log_hyperparameter("lr", std=0.1, min=1e-5)
         strategy.bind_linear_hyperparameter("weight_decay", std=0.001)
 
         # Verify both in schema
@@ -124,7 +124,7 @@ class TestAbstractStrategyConfiguration:
 
         # Try to bind non-existent hyperparameter
         with pytest.raises((ValueError, KeyError, RuntimeError)):
-            strategy.bind_log_hyperparameter("nonexistent_param", std=0.1)
+            strategy.bind_log_hyperparameter("nonexistent_param", std=0.1, min=1e-5)
 
     def test_constructor_accepts_config_dict(self):
         """Constructor should accept native JSON config dict."""
@@ -136,7 +136,7 @@ class TestAbstractStrategyConfiguration:
 
         config = {
             "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True},
-            "weight_decay": {"type": "linear", "std": 0.001, "min": 0, "max": 0.1, "shared": False}
+            "weight_decay": {"type": "linear", "std": 0.001, "min": 0.0, "max": 0.1, "shared": False}
         }
 
         strategy = ConcreteTestStrategy(state, communication, config)
@@ -188,7 +188,7 @@ class TestAbstractStrategySerialization:
         communication = Communication()
         strategy = ConcreteTestStrategy(state, communication)
 
-        strategy.bind_log_hyperparameter("lr", std=0.1)
+        strategy.bind_log_hyperparameter("lr", std=0.1, min=1e-5)
         strategy.bind_linear_hyperparameter("weight_decay", std=0.001)
 
         schema = strategy.state_dict()
@@ -239,7 +239,7 @@ class TestAbstractStrategyOrchestration:
             {"lr": [0.002]}
         ]
 
-        strategy = ConcreteTestStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "shared": True}})
+        strategy = ConcreteTestStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}})
 
         # Call step
         strategy.step(0.95)
@@ -268,7 +268,7 @@ class TestAbstractStrategyOrchestration:
             {"lr": [0.002]}
         ]
 
-        strategy = ConcreteTestStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "shared": True}})
+        strategy = ConcreteTestStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}})
 
         # Call step
         strategy.step(0.95)
@@ -318,7 +318,7 @@ class TestAbstractStrategyOrchestration:
                 self.comm_passed.append(communication)
                 return super().reduce_optimizer(world_weights, optimizer_pytree, communication)
 
-        strategy = TrackingStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "shared": True}})
+        strategy = TrackingStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}})
 
         # Call step
         strategy.step(0.95)

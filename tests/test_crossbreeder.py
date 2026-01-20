@@ -10,7 +10,7 @@ import pytest
 from unittest.mock import Mock
 
 from ddp_pbt.base.crossbreeder import Crossbreeder
-from ddp_pbt.base.permuter import Permuter
+from ddp_pbt.base.perturber import Perturber as Permuter
 
 
 class TestCrossbreederSetup:
@@ -104,15 +104,12 @@ class TestCrossbreederParentSelection:
         assert abs(sum(parent_weights) - 1.0) < 1e-6
 
     def test_parent_pool_depth_larger_than_world_size(self):
-        """If parent_pool_depth > world_size, should select 2 from all workers."""
+        """If parent_pool_depth > world_size, should raise ValueError."""
         crossbreeder = Crossbreeder(parent_pool_depth=10, mutation_rate=0.0)
         world_weights = [0.2, 0.3, 0.5]
 
-        parent_weights = crossbreeder.select_parents(world_weights)
-
-        non_zero_count = sum(1 for w in parent_weights if w > 0)
-        assert non_zero_count == 2
-        assert abs(sum(parent_weights) - 1.0) < 1e-6
+        with pytest.raises(ValueError, match="parent_pool_depth.*cannot exceed world_size"):
+            crossbreeder.select_parents(world_weights)
 
 
 class TestCrossbreederHyperparameterBlending:
