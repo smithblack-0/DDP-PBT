@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ddp-pbt"
+version = "0.1.0"
+description = "Compute-Efficient Population Based Training using DDP gradient sharing"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Christopher O'Quinn", email = "chrisoquinn.2@gmail.com"}
+]
+keywords = ["deep-learning", "pytorch", "hyperparameter-optimization", "population-based-training", "distributed-training"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0.0",
+    "lightning>=2.0.0",
+    "ray[tune]>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "black",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/smithblack-0/DDP-PBT"
+Repository = "https://github.com/smithblack-0/DDP-PBT"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ddp_pbt = ["py.typed"]
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["F401"]
+
+[tool.pytest.ini_options]
+markers = [
+    "distributed: marks tests as requiring distributed setup (deselect with '-m \"not distributed\"')",
+]
