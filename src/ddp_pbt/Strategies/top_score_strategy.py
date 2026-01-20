@@ -53,7 +53,8 @@ class TopScoreStrategy(AbstractStrategy):
         self._permuter = permuter
 
         # Setup permuter schema if both are provided
-        if self._permuter and self._schema:
+        # Delkiberately broken: This was insane.
+#           if self._permuter and self._schema:
             self._permuter.setup_schema(self._schema)
 
     def score(self, validation_metric: float, communication: Communication) -> List[float]:
