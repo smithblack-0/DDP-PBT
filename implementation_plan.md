@@ -560,6 +560,13 @@ Each strategy implements the 4 abstract methods coherently. Dependencies are inj
 - Private: _leading_underscore
 - Constants: UPPER_SNAKE_CASE
 
+**Import style**:
+- Test suite: Use `from src.ddp_pbt.base.X import Y` (absolute with src. prefix)
+- Modules: Use relative imports `from .utilities import walk_single_pytree`
+- Package __init__.py: Use relative imports, order primitives first (e.g., State before AbstractStrategy)
+- Circular import resolution: Reorder imports so more primitive components come first
+- This style avoids circular import issues by maintaining clear dependency hierarchy
+
 ---
 
 ## Development Workflow
