@@ -10,7 +10,7 @@ import pytest
 
 from src.ddp_pbt.base.perturber import Perturber
 # Deleted illegal alias claude. Go rename everything to perturber instead.
-# Stop being lazy.
+# Stop being lazy. Using random aliases like that is a code smell. No as. No alias. Nope.
 
 class TestPermuterSetupSchema:
     """Tests that setup_schema correctly configures perturbation behavior."""
