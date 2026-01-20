@@ -7,7 +7,8 @@ from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 import torch
-from ddp_pbt.base.utilities import walk_single_pytree, patch_pytree
+
+from src.ddp_pbt.base.utilities import walk_single_pytree, patch_pytree
 
 
 class State:
@@ -156,7 +157,7 @@ class State:
                     f"At pytree path '{path}' the number of valid param groups did not "
                     f"match gathered data, despite being in schema"
                 )
-                warnings.warn(msg)
+                raise RuntimeError(msg)
             else:
                 if self.schema[path]['shared']:
                     value_list = value_list[:1]
