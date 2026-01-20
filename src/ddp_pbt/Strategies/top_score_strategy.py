@@ -8,10 +8,10 @@ adopts their hyperparameters (with perturbation), model, and optimizer state.
 from typing import List, Dict, Optional, Any
 import torch
 
-from .abstract_strategy import AbstractStrategy
-from .state import State
-from .communication import Communication
-from .perturber import Perturber
+from src.ddp_pbt.base.abstract_strategy import AbstractStrategy
+from src.ddp_pbt.base.state import State
+from src.ddp_pbt.base.communication import Communication
+from src.ddp_pbt.base.perturber import Perturber
 
 
 class TopScoreStrategy(AbstractStrategy):
