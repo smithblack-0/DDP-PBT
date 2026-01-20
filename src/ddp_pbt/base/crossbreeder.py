@@ -9,35 +9,6 @@ import math
 from typing import Dict, List, Any, Optional
 
 
-def _blend_log_elements(elements: List[float], weights: List[float]) -> float:
-    """
-    Blend elements in log-space with given weights.
-
-    Args:
-        elements: List of values to blend.
-        weights: List of weights (must sum to 1.0).
-
-    Returns:
-        Blended value.
-    """
-    log_elements = [math.log(e) for e in elements]
-    blended_log = sum(w * le for w, le in zip(weights, log_elements))
-    return math.exp(blended_log)
-
-
-def _blend_linear_elements(elements: List[float], weights: List[float]) -> float:
-    """
-    Blend elements in linear-space with given weights.
-
-    Args:
-        elements: List of values to blend.
-        weights: List of weights (must sum to 1.0).
-
-    Returns:
-        Blended value.
-    """
-    return sum(w * e for w, e in zip(weights, elements))
-
 
 class Crossbreeder:
     """
@@ -101,6 +72,7 @@ class Crossbreeder:
         # Rank workers by weight (descending)
         indexed_weights = [(i, w) for i, w in enumerate(world_weights)]
         indexed_weights.sort(key=lambda x: x[1], reverse=True)
+        sorted_indexes = [i for i, _ in indexed_weights]
 
         # Get top parent_pool_depth workers
         # Validate we have enough workers
@@ -113,20 +85,70 @@ class Crossbreeder:
                 f"parent_pool_depth ({self._parent_pool_depth}) cannot exceed world_size ({len(world_weights)})"
             )
 
-        top_pool = indexed_weights[:self._parent_pool_depth]
+        top_pool = sorted_indexes[:self._parent_pool_depth]
 
         # Randomly select 2 parents from pool
-        selected = random.sample(top_pool, 2)
-
-        # Build filtered weights with only selected parents
+        # Both have a 50% selection rate.
+        selected_parents = random.sample(top_pool, 2)
         result_weights = [0.0] * len(world_weights)
-        total_weight = sum(w for _, w in selected)
-
-        for idx, weight in selected:
-            # Normalize selected weights to sum to 1.0
-            result_weights[idx] = weight / total_weight
-
+        for parent_idx in selected_parents:
+            result_weights[parent_idx] = 0.5
         return result_weights
+
+    def crossbreed_alleles(self,
+                          name: str,
+                          a_list: List[float],
+                          b_list: List[float]
+                          )->List[float]:
+        """
+        Crossbreed a group of alleles of a common type.
+        Different parameter groups may or may not be
+        configured differently, necessitating list processing.
+        Think of them like different parts of the body being configured
+        slightly diferently.
+
+
+        :param name: The name the hyperparameter is called by
+        :param a_list: The first list of values
+        :param b_list: The second list of values
+        :return: The returned list of values
+        """
+        assert len(a_list) == len(b_list)
+        schema_config = self._schema[name]
+        allele_type = schema_config["type"]
+        if allele_type == "log":
+            def average_in_logspace(a: float, b: float)->float:
+                a, b = math.log(a), math.log(b)
+                output = (a + b)/2.0
+                return math.exp(output)
+            new_alleles = [average_in_logspace(a, b) for a, b in zip(a_list, b_list)]
+            return new_alleles
+        elif allele_type == "linear":
+            new_allele = [(a + b)/2.0 for a, b in zip(a_list, b_list)]
+            return new_allele
+        else:
+            raise ValueError(f"Unknown allele type {allele_type}")
+
+    def mutate_alleles(self,
+                       name: str,
+                       allele_group: List[float],
+                       )->List[float]:
+        """
+        Mutates a list of alleles. Each mutation has
+        a mutation_chance% percentage of happing. The
+        permuter still owns the mutation code.
+
+        :param name: The name of the mutation to do
+        :param allele_group: The group to mutate
+        :return: A mutated group. Each had a mutation
+            chance of actually occuring
+        """
+        output = []
+        for allele in allele_group:
+            if random.random() < self._mutation_rate:
+                allele = self._permuter.apply_perturbation(name, allele)
+            output.append(allele)
+        return output
 
     def crossbreed_hyperparameters(
         self,
@@ -155,51 +177,31 @@ class Crossbreeder:
             return {}
 
         # Extract non-zero parent indices and weights
-        parents = [(i, w) for i, w in enumerate(parent_weights) if w > 0]
+        parents = [i for i, w in enumerate(parent_weights) if w > 0]
 
         if len(parents) == 0:
             raise ValueError("No parents selected (all weights are zero)")
         if len(parents) != 2:
             raise ValueError(f"Expected exactly 2 parents, got {len(parents)}")
 
-        # Blend each hyperparameter
+        mother_index, father_index = parents
+        mother = world_hyperparameters[mother_index]
+        father = world_hyperparameters[father_index]
+
+        # The new genomes are 50% of each original
+        # genome, with a possible mutation.
         result = {}
+        for allele_key in mother.keys():
+            # Note these are still divided per
+            # hyperparameter group. Sort of like different
+            # parts of the body having different epigenomes.
+            mother_allele_group = mother[allele_key]
+            father_allele_group = father[allele_key]
 
-        for param_name in self._schema:
-            config = self._schema[param_name]
-            param_type = config["type"]
-
-            # Get parent hyperparameter values
-            parent_values = [world_hyperparameters[i][param_name] for i, w in parents]
-            parent_weights_list = [w for i, w in parents]
-
-            # Determine list length from first parent
-            num_elements = len(parent_values[0])
-
-            # Blend element-wise for per-group parameters
-            blended_values = []
-            for elem_idx in range(num_elements):
-                # Extract element from each parent
-                elements = [pv[elem_idx] for pv in parent_values]
-
-                # Blend based on type using helper functions
-                if param_type == "log":
-                    blended = _blend_log_elements(elements, parent_weights_list)
-                elif param_type == "linear":
-                    blended = _blend_linear_elements(elements, parent_weights_list)
-                else:
-                    raise ValueError(f"Unknown parameter type: {param_type}")
-
-                blended_values.append(float(blended))
-
-            result[param_name] = blended_values
-
-        # Probabilistic mutation
-        if random.random() < self._mutation_rate:
-            if self._permuter is None:
-                raise RuntimeError(
-                    "Permuter not configured but mutation_rate > 0. Call setup_permuter()"
-                )
-            result = self._permuter.perturb(result)
-
+            if allele_key in self._schema:
+                child_allele_group = self.crossbreed_alleles(allele_key, mother_allele_group, father_allele_group)
+                child_allele_group = self.mutate_alleles(allele_key, child_allele_group)
+            else:
+                raise RuntimeError(f"Attempt to crossbreed unconfigured schema: {allele_key}")
+            result[allele_key] = child_allele_group
         return result
