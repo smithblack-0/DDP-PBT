@@ -141,8 +141,8 @@ class TestPermuterLogPerturbation:
         values = {"lr": [0.09]}
         for _ in range(100):
             result = permuter.perturb(values)
-            # Should never exceed maximum
-            assert result["lr"][0] <= 1e-1
+            # Should never exceed maximum (allowing for floating point precision)
+            assert result["lr"][0] <= 1e-1 + 1e-9
 
     def test_log_without_bounds(self):
         """Log parameters without max bound should perturb freely in log-space."""
