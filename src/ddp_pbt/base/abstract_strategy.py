@@ -127,10 +127,37 @@ def validate_schema(schema: Dict[str, Dict[str, Any]]) -> None:
 class AbstractStrategy(LRScheduler, ABC):
     """
     Base class for Population Based Training strategies.
-    A schedule. With all the baggage.Yes
+    A schedule. With all the baggage.
+
+    Strategies bind to existing optimizer float values
+    then promise to update them by some means. This is
+    the abstract version of that strategy promise. It
+    primarily worries about figuring out what we
+    are bound to and how to use it.
+
+    It is up to the rest of the training
+    system to respond appropriately, and it should
+    be noted strategies only produce valid training
+    feedback when they are in a DDP environment and
+    modify optimizer processes such as learning rate,
+    weight decay, or clipping limits.  Anything that can
+    be applied to common gradients across different devices
+    is fair game.
+
+    Binding to features that influence how a model computes,
+    rather than how gradients are turned into parameter updates,
+    (such as dropout rates) will not correctly be isolated
+    between devices due to gradients on all devices being common;
+    the only thing that changes is how each device turns the
+    gradients into updates. Keep this caviot in mind.
+
+    Note that the list of valid binding schemas does not know whether
+    or not an property is a model evaluation modification or merely
+    a gradient application modification. optimizer step or evaluation
+    property, so do not blindly bind to everything.
 
     Responsibilities:
-    - Owns and builds the hyperparameter schema
+    - Owns and builds the hyperparameter schema representing bindings.
     - Provides configuration methods (bind_log_hyperparameter, bind_linear_hyperparameter)
     - Orchestrates round-end flow via step() method
     - Defines abstract methods that concrete strategies must implement
