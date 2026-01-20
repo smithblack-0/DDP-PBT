@@ -15,7 +15,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from ddp_pbt.base.communication import Communication
+from src.ddp_pbt.base.communication import Communication
 
 
 def gather_worker(rank, world_size, output_dir, master_addr, master_port):
