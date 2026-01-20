@@ -90,8 +90,22 @@ Since they are so common, you may add properties to a class so long as you updat
 
 ## Core Principles
 
-1. **Plan is contract**: If it's not in implementation_plan.md or a logical consequence of the implementation requirements, it needs review. 
-2. **Pause is not failure**: It's responsible delegation recognition. Think going back to the client for more requirements. 
+1. **Plan is contract**: If it's not in implementation_plan.md or a logical consequence of the implementation requirements, it needs review.
+2. **Pause is not failure**: It's responsible delegation recognition. Think going back to the client for more requirements.
 3. **Understanding before execution**: PAUSED state prioritizes clarity over progress; be stop minded. Trying to figure out only what you need rather than looking at the ripple effects the right change will make is not using your tokens properly.
 4. **Explicit handoffs**: No implicit autonomy restoration
 5. **When in doubt, pause**: Better to ask than to accumulate technical debt
+
+## Post-Autonomy Reporting
+
+When completing an autonomous work session, provide a summary report including:
+
+1. **Work Completed**: What was accomplished
+2. **Test Status**: Current passing/failing test counts
+3. **Commits Made**: List of commits created during the session
+4. **Commit Squashing Recommendations**: Review the commits and identify any that form semantic units and should be squashed together (e.g., "implementation + tests + plan update for feature X")
+5. **Outstanding Issues**: Any blockers, questions, or incomplete work
+6. **Next Steps**: Recommended next actions
+7. **Audit of quality**: A justification for why the work was done properly. This involves an actual audit of your action. If issues pop up, instead make new checklist items to resolve them instead. 
+
+This report helps maintain visibility and allows the user to review git history organization.
