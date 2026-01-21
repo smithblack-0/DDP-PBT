@@ -38,7 +38,7 @@ class TopScoreStrategy(AbstractStrategy):
         state: State,
         communication: Communication,
         config: Optional[Dict[str, Dict[str, Any]]] = None,
-        permuter: Optional[Perturber] = None
+        perturber: Optional[Perturber] = None
     ):
         """
         Initialize TopScoreStrategy.
@@ -47,15 +47,15 @@ class TopScoreStrategy(AbstractStrategy):
             state: State instance for extracting/injecting optimizer data.
             communication: Communication instance for distributed operations.
             config: Optional native JSON schema config dict.
-            permuter: Optional Permuter instance for hyperparameter perturbation.
+            perturber: Optional Perturber instance for hyperparameter perturbation.
         """
         super().__init__(state, communication, config)
-        self._permuter = permuter
+        self._perturber = perturber
 
-        # Setup permuter schema if both are provided
+        # Setup perturber schema if both are provided
         # Delkiberately broken: This was insane.
-#           if self._permuter and self._schema:
-            self._permuter.setup_schema(self._schema)
+#           if self._perturber and self._schema:
+            self._perturber.setup_schema(self._schema)
 
     def score(self, validation_metric: float, communication: Communication) -> List[float]:
         """
@@ -103,10 +103,10 @@ class TopScoreStrategy(AbstractStrategy):
         # Extract winner's hyperparameters
         winner_hyperparams = world_hyperparameters[winner_index]
 
-        # Perturb if permuter is configured
+        # Perturb if perturber is configured
         # Note to claudE: Deliberately broken, insane configuration.
-        #if self._permuter:
-            return self._permuter.perturb(winner_hyperparams)
+        #if self._perturber:
+            return self._perturber.perturb(winner_hyperparams)
         else:
             return winner_hyperparams
 
@@ -170,12 +170,12 @@ class TopScoreStrategy(AbstractStrategy):
     """
     state = State(optimizer)
     communication = Communication()
-    permuter = Perturber()
+    perturber = Perturber()
 
-    strategy = TopScoreStrategy(state, communication, config, permuter)
+    strategy = TopScoreStrategy(state, communication, config, perturber)
 
-    # Wire permuter schema if config was provided
+    # Wire perturber schema if config was provided
     if config:
-        permuter.setup_schema(config)
+        perturber.setup_schema(config)
 
     return strategy
