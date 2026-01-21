@@ -174,6 +174,112 @@ class TestMakeTopScoreStrategyFactory:
         # Schema should be loaded
         assert strategy.schema == config
 
-# Note to claude: Hey, where are my integration tests? Lets make an AdamW, bind to it using linear on
-# on learning rate and log on weight decay, and step a few times, for a dumb simple model .
-# We need integration tests too.
+
+import os
+import sys
+import json
+import tempfile
+from pathlib import Path
+import torch.multiprocessing as mp
+import torch.distributed as dist
+
+
+def integration_worker(rank, world_size, output_dir, master_addr, master_port):
+    """Worker function for integration test."""
+    # Setup environment
+    os.environ["MASTER_ADDR"] = master_addr
+    os.environ["MASTER_PORT"] = master_port
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+
+    # Initialize process group
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    try:
+        # Create simple model
+        model = torch.nn.Linear(10, 1)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.001)
+
+        # Create strategy and bind hyperparameters
+        strategy = make_top_score_strategy(optimizer)
+        strategy.bind_linear_hyperparameter("lr", std=0.001, min=0.001, max=0.1)
+        strategy.bind_log_hyperparameter("weight_decay", std=0.1, min=1e-5, max=0.01)
+
+        # Run multiple rounds
+        results = []
+        for round_idx in range(3):
+            # Simulate training - just record current hyperparams
+            current_lr = optimizer.param_groups[0]['lr']
+            current_wd = optimizer.param_groups[0]['weight_decay']
+
+            # Simulate validation loss (rank 0 best in round 0, rank 1 best in round 1)
+            if round_idx == 0:
+                val_loss = 1.0 if rank == 0 else 2.0
+            elif round_idx == 1:
+                val_loss = 2.0 if rank == 0 else 1.0
+            else:
+                val_loss = float(rank + 1)
+
+            results.append({
+                "round": round_idx,
+                "lr": current_lr,
+                "weight_decay": current_wd,
+                "val_loss": val_loss
+            })
+
+            # Step strategy
+            strategy.step(val_loss)
+
+        # Save results
+        output_file = Path(output_dir) / f"rank_{rank}.json"
+        with open(output_file, "w") as f:
+            json.dump({"results": results}, f)
+
+    finally:
+        dist.destroy_process_group()
+
+
+import pytest
+
+
+@pytest.mark.distributed
+@pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")
+class TestTopScoreStrategyIntegration:
+    """Integration tests with real distributed environment."""
+
+    def test_adamw_with_lr_and_weight_decay_binding(self):
+        """Integration test: AdamW with linear lr and log weight_decay over multiple rounds."""
+        world_size = 2
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Spawn worker processes
+            mp.spawn(
+                integration_worker,
+                args=(world_size, tmpdir, "localhost", "29600"),
+                nprocs=world_size,
+                join=True,
+            )
+
+            # Collect results from all ranks
+            results = []
+            for rank in range(world_size):
+                output_file = Path(tmpdir) / f"rank_{rank}.json"
+                with open(output_file, "r") as f:
+                    data = json.load(f)
+                    results.append(data["results"])
+
+            # Verify both workers completed all rounds
+            assert len(results[0]) == 3
+            assert len(results[1]) == 3
+
+            # Verify hyperparameters changed between rounds (perturbation occurred)
+            rank0_lr_round0 = results[0][0]["lr"]
+            rank0_lr_round1 = results[0][1]["lr"]
+            # LR should have changed due to perturbation
+            assert rank0_lr_round0 != rank0_lr_round1, "LR should change between rounds"
+
+            # Verify hyperparameters stay within bounds
+            for rank_results in results:
+                for round_result in rank_results:
+                    assert 0.001 <= round_result["lr"] <= 0.1, "LR should stay within bounds"
+                    assert 1e-5 <= round_result["weight_decay"] <= 0.01, "Weight decay should stay within bounds"
