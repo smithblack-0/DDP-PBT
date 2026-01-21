@@ -15,7 +15,8 @@ class Crossbreeder:
     Handles parent selection and hyperparameter crossbreeding with probabilistic mutation.
 
     Selects parents from top-K workers and blends their hyperparameters.
-    Can optionally mutate the result based on mutation_rate.
+    Can optionally mutate the result based on mutation_rate. New
+    hyperparameters are a 50/50
     """
 
     def __init__(self, parent_pool_depth: int, mutation_rate: float):
@@ -56,44 +57,10 @@ class Crossbreeder:
         Args:
             perturber: Perturber instance for mutating crossbred hyperparameters.
         """
+        if self._schema is None:
+            raise RuntimeError("Should initialize schema first")
         self._perturber = perturber
-
-    def select_parents(self, validation_loss: List[float]) -> List[float]:
-        """
-        Select 2 parents from top parent_pool_depth workers.
-
-        Args:
-            validation_loss: Validation loss list. Lower is better.
-
-        Returns:
-            Filtered world weights with exactly 2 non-zero entries (sum = 1.0).
-            Non-zero entries are for the 2 randomly selected parents from top-K.
-        """
-        # Rank workers by weight (descending)
-        indexed_weights = [(i, w) for i, w in enumerate(validation_loss)]
-        indexed_weights.sort(key=lambda x: x[1], reverse=False)
-        sorted_indexes = [i for i, _ in indexed_weights]
-
-        # Get top parent_pool_depth workers
-        # Validate we have enough workers
-        if len(validation_loss) < 2:
-            raise ValueError(
-                f"Cannot crossbreed with less than 2 workers, got {len(validation_loss)}"
-            )
-        if self._parent_pool_depth > len(validation_loss):
-            raise ValueError(
-                f"parent_pool_depth ({self._parent_pool_depth}) cannot exceed world_size ({len(validation_loss)})"
-            )
-
-        top_pool = sorted_indexes[:self._parent_pool_depth]
-
-        # Randomly select 2 parents from pool
-        # Both have a 50% selection rate.
-        selected_parents = random.sample(top_pool, 2)
-        result_weights = [0.0] * len(validation_loss)
-        for parent_idx in selected_parents:
-            result_weights[parent_idx] = 0.5
-        return result_weights
+        self._perturber.setup_schema(self._schema)
 
     def crossbreed_alleles(self,
                           name: str,
@@ -114,20 +81,10 @@ class Crossbreeder:
         :return: The returned list of values
         """
         assert len(a_list) == len(b_list)
-        schema_config = self._schema[name]
-        allele_type = schema_config["type"]
-        if allele_type == "log":
-            def average_in_logspace(a: float, b: float)->float:
-                a, b = math.log(a), math.log(b)
-                output = (a + b)/2.0
-                return math.exp(output)
-            new_alleles = [average_in_logspace(a, b) for a, b in zip(a_list, b_list)]
-            return new_alleles
-        elif allele_type == "linear":
-            new_allele = [(a + b)/2.0 for a, b in zip(a_list, b_list)]
-            return new_allele
-        else:
-            raise ValueError(f"Unknown allele type {allele_type}")
+        output = []
+        for a, b in zip(a_list, b_list):
+            output.append(random.choice([a, b]))
+        return output
 
     def mutate_alleles(self,
                        name: str,
@@ -166,9 +123,9 @@ class Crossbreeder:
             Blended hyperparameter values, possibly mutated.
 
         Blending behavior:
-        - Log parameters: blend in log-space, convert back
-        - Linear parameters: blend in linear-space
-        - With mutation_rate probability: perturb result via perturber
+        - At each individual allele, choose one of the two parents with
+          50% probability. This becomes the new allele
+        - With mutation_rate probability: perturb result via perturber.
         """
         if self._schema is None:
             raise RuntimeError("Must call setup_schema before crossbreed_hyperparameters")
@@ -189,7 +146,8 @@ class Crossbreeder:
         father = world_hyperparameters[father_index]
 
         # The new genomes are 50% of each original
-        # genome, with a possible mutation.
+        # genome, with a possible mutation. Alleles
+        # are chosen discretely, however.
         result = {}
         for allele_key in mother.keys():
             # Note these are still divided per

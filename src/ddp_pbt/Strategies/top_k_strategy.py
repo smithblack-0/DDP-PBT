@@ -47,7 +47,7 @@ class TopKStrategy(AbstractStrategy):
                  config: Optional[Dict[str, Any]] = None,
                  ):
         """
-        :parmm num_k: Number of k. Cannot be larger than world size.
+        :param num_k: Number of k. Cannot be larger than world size.
         :param state: The state object used for optimizer access
         :param communication: The communication objecct used for distributed work
         :param perturber: The perturbed used to mutate
@@ -68,16 +68,14 @@ class TopKStrategy(AbstractStrategy):
         :param communication: The communication mechanism
         :return: The top results
         """
-        if self.num_k > len(validation_metrics):
+        if self._num_k > len(validation_metrics):
             raise RuntimeError("Num k was greater than world size")
-
-        desire = random.random()
 
         # Sort the metrics and produce a top-k list
         # and make a decision.
         validation_metrics = np.array(validation_metrics)
         ascending_order = np.argsort(validation_metrics)
-        top_k = ascending_order[-self.num_k:]
+        top_k = ascending_order[:self._num_k]
         choice = int(np.random.choice(top_k, size=1))
 
         # Submit our proposal; first rank wins
@@ -208,7 +206,7 @@ def make_top_k_strategy_by_selection_percentage(
     ScheduleAnything (torch-schedule-anything).
 
 
-    :param selection_percentage: A number between 0 and 100 indicating what percent
+    :param selection_percentage: A number between 0 and 1.0 indicating what percent
         of the world to randomly, and globally, select from.
     :param optimizer: The optimizer to use for setup.
     :param max_hyperparameter_search_depth: How many layers deep to search each param group for
@@ -219,10 +217,10 @@ def make_top_k_strategy_by_selection_percentage(
     :return: A valid TopKStrategy object.
     """
     # Handle conversion
-    assert selection_percentage >= 0 and selection_percentage <= 100
+    assert selection_percentage >= 0 and selection_percentage <= 1.0
     communicator = communication_class()
     world_size = communicator.world_size
-    top_k = int(world_size*selection_percentage/100.0)
+    top_k = int(world_size*selection_percentage)
 
     # Build and return
     perturber = Perturber()

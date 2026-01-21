@@ -18,9 +18,12 @@ class Communication:
     and computing weighted reductions across workers.
     """
 
-    def __init__(self):
+    def __init__(self, suppress_error: bool = False):
         """Initialize Communication (no state needed)."""
-        pass
+        if not dist.is_initialized():
+            raise EnvironmentError("Distributed world is not initiated")
+        if self.world_size == 1 and not suppress_error:
+            raise EnvironmentError("No DDP-PBT algorithm can be executed with only one worker")
 
     @property
     def world_size(self)->int:
@@ -43,7 +46,7 @@ class Communication:
             List of pytree from all workers (length = world_size).
             Each element is the pytree from that rank.
         """
-        if not dist.is_initialized():
+        if not (dist.is_available() and dist.is_initialized()):
             raise NotImplementedError("Cannot use DDP-PBT in non-distributed mode")
         world_size = dist.get_world_size()
         output_list = [None]*world_size
