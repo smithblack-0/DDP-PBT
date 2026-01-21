@@ -57,25 +57,22 @@ class TopScoreStrategy(AbstractStrategy):
 #           if self._perturber and self._schema:
             self._perturber.setup_schema(self._schema)
 
-    def score(self, validation_metric: float, communication: Communication) -> List[float]:
+    def score(self, validation_metrics: List[float], communication: Communication) -> List[float]:
         """
         Find best worker and return world weights.
 
         Args:
-            validation_metric: Local worker's validation metric (lower is better).
-            communication: Communication instance for gathering metrics.
+            validation_metrics: Validation metrics from all workers (lower is better).
+            communication: Communication instance (unused).
 
         Returns:
             World weights with 1.0 at best worker index, 0.0 elsewhere.
         """
-        # Gather validation metrics from all workers
-        all_metrics = communication.gather_pytree_list(validation_metric)
-
         # Find argmin (best worker with lowest loss)
-        best_index = all_metrics.index(min(all_metrics))
+        best_index = validation_metrics.index(min(validation_metrics))
 
         # Build world weights: 1.0 at best, 0.0 elsewhere
-        world_weights = [0.0] * len(all_metrics)
+        world_weights = [0.0] * len(validation_metrics)
         world_weights[best_index] = 1.0
 
         return world_weights
