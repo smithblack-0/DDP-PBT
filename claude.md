@@ -1,5 +1,20 @@
 # Rules of Autonomy
 
+## CRITICAL: Reading Context Files
+
+**Before beginning any work session:**
+- Read ALL critical context files in their ENTIRETY without using limit parameter
+- Critical files include: CLAUDE.md, implementation_plan.md, proposal.md
+- These files may be 700+ lines and contain essential contracts, testing rules, and design decisions
+- Skipping or partially reading these files leads to violations of core contracts (e.g., black box testing)
+- Use `Read` tool WITHOUT `limit` parameter to ensure complete understanding
+
+**Example:**
+```
+Read(file_path="implementation_plan.md")  # ✓ Correct - reads entire file
+Read(file_path="implementation_plan.md", limit=100)  # ✗ Wrong - misses critical information
+```
+
 ## Autonomy States
 
 ### RELEASED
@@ -130,3 +145,8 @@ When completing an autonomous work session, provide a summary report including:
 7. **Audit of quality**: A justification for why the work was done properly. This involves an actual audit of your action. If issues pop up, instead make new checklist items to resolve them instead. 
 
 This report helps maintain visibility and allows the user to review git history organization.
+
+# Final notes.
+
+- Run tests using wsl at /home/chris/.virtualenvs/DDP-PBT/bin/python for tests, as GLOO needs a linux backend. Remember to switch wsl versions to ubuntu.
+- Do git through windows. 
