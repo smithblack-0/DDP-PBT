@@ -337,3 +337,80 @@ class TestCommunicationReduceByWorldWeights:
             # 0.4 * 100 + 0.6 * 300 = 40 + 180 = 220
             reduced = results[0]
             assert abs(reduced["param1"][0] - 220.0) < 1e-5
+
+
+def properties_worker(rank, world_size, output_dir, master_addr, master_port):
+    """Worker function for testing world_size and rank properties."""
+    # Setup environment
+    os.environ["MASTER_ADDR"] = master_addr
+    os.environ["MASTER_PORT"] = master_port
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+
+    # Initialize process group
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    try:
+        # Create Communication instance
+        comm = Communication()
+
+        # Check properties
+        reported_rank = comm.rank
+        reported_world_size = comm.world_size
+
+        # Save results
+        output_file = Path(output_dir) / f"rank_{rank}.json"
+        with open(output_file, "w") as f:
+            json.dump({
+                "rank": reported_rank,
+                "world_size": reported_world_size
+            }, f)
+
+    finally:
+        dist.destroy_process_group()
+
+
+@pytest.mark.distributed
+@pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")
+class TestCommunicationProperties:
+    """Tests world_size and rank properties."""
+
+    def test_world_size_property(self):
+        """world_size property should return correct world size."""
+        world_size = 3
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Spawn worker processes
+            mp.spawn(
+                properties_worker,
+                args=(world_size, tmpdir, "localhost", "29505"),
+                nprocs=world_size,
+                join=True,
+            )
+
+            # Verify all workers report correct world_size
+            for rank in range(world_size):
+                output_file = Path(tmpdir) / f"rank_{rank}.json"
+                with open(output_file, "r") as f:
+                    data = json.load(f)
+                    assert data["world_size"] == world_size, f"Rank {rank} reports wrong world_size"
+
+    def test_rank_property(self):
+        """rank property should return correct rank for each worker."""
+        world_size = 3
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Spawn worker processes
+            mp.spawn(
+                properties_worker,
+                args=(world_size, tmpdir, "localhost", "29506"),
+                nprocs=world_size,
+                join=True,
+            )
+
+            # Verify each worker reports correct rank
+            for rank in range(world_size):
+                output_file = Path(tmpdir) / f"rank_{rank}.json"
+                with open(output_file, "r") as f:
+                    data = json.load(f)
+                    assert data["rank"] == rank, f"Worker at rank {rank} reports wrong rank"
