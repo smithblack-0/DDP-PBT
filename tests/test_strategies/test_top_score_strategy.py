@@ -177,7 +177,7 @@ class TestMakeTopScoreStrategyFactory:
             "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True}
         }
 
-        strategy = make_top_score_strategy(optimizer, config)
+        strategy = make_top_score_strategy(optimizer, config=config)
 
         # Schema should be loaded
         assert strategy.schema == config
