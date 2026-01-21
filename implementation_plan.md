@@ -291,7 +291,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 **Interface**:
 1. `setup_schema(schema)` → configure blending behavior for hyperparameters (takes Schema)
 2. `setup_permuter(permuter)` → inject Permuter for probabilistic mutation
-3. `select_parents(world_weights)` → returns filtered World Weights
+3. `select_parents(validation_losses)` → returns filtered World Weights
    - Ranks workers by weight
    - Randomly selects 2 parents from top parent_pool_depth entries
    - Returns World Weights with non-zero values only for selected parents (sums to 1.0)
@@ -385,14 +385,14 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 **Flow in step(validation_metric)**:
 1. Get local data from State: hyperparams, model_pytree, optimizer_pytree
 2. Gather world_hyperparameters via Communication
-3. Call abstract `score(validation_metric, communication)` → returns World Weights
+3. Call abstract `score(validation_metrics, communication)` → returns World Weights
 4. Call abstract `reduce_hyperparameters(world_weights, world_hyperparameters, communication)` → returns Hyperparameter Values
 5. Call abstract `reduce_models(world_weights, model_pytree, communication)` → returns updated model pytree
 6. Call abstract `reduce_optimizer(world_weights, optimizer_pytree, communication)` → returns updated optimizer pytree
 7. Inject results back via State
 
 **Abstract methods** (concrete strategies must implement all 4 coherently):
-- `score(validation_metric, communication)` → World Weights
+- `score(validation_metrics, communication)` → World Weights
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)` → Hyperparameter Values
 - `reduce_models(world_weights, model_pytree, communication)` → updated model Tensor PyTree
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)` → updated optimizer Tensor PyTree
@@ -414,10 +414,16 @@ Each strategy implements the 4 abstract methods coherently. Dependencies are inj
 
 Note to claude: This is clearly out of date. You need to go fix it.
 
+**Intention**:
+
+All workers start with the same model, then permute it.
+Best one wins on all workers. We locally permute that 
+model on all workers for the next round. 
+
 **Dependencies**: Permuter (injected)
 
 **Implementation**:
-- `score(validation_metric, communication)`:
+- `score(validation_metrics, communication)`:
   - Gather validation metrics from all workers via communication
   - Find argmax (best worker)
   - Return World Weights: 1.0 at best index, 0.0 elsewhere
@@ -437,6 +443,13 @@ Note to claude: This is clearly out of date. You need to go fix it.
 ---
 
 #### TopKStrategy
+
+**Intention**:
+
+All workers start from the same model. We globally choose one of the topk
+workers to move onto the next round. All workers then permute this into
+a new variation.
+
 **Dependencies**: Permuter (injected)
 
 **Configuration**: k (int) or percent_chosen (float) - number/fraction of top workers to sample from
@@ -446,6 +459,8 @@ Note to claude: This is clearly out of date. You need to go fix it.
   - Gather validation metrics from all workers
   - Rank workers by metric
   - Randomly select one from top-K
+  - Propose choice
+  - Choose the rank 0's worker's choice. 
   - Return World Weights: 1.0 at selected index, 0.0 elsewhere
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
@@ -462,18 +477,26 @@ Note to claude: This is clearly out of date. You need to go fix it.
 ---
 
 #### WeightedAverageStrategy
+
+**Intention**
+
+Average together the better permutation; only one model moves forward per round
+
+All workers receive the scores, and form the same weighted average out of this
+score. These weights are then applied in all models producing the same model everywhere.
+This model is then permuted.
+
 **Dependencies**: Permuter
 
 **Implementation**:
 - `score(validation_metric, communication)`:
-  - Gather validation metrics from all workers
-  - Normalize to weights: subtract min, normalize to sum=1
+  - Gather validation metrics from all workers.
+  - Normalize to weights: subtract min, then normalize to sum=1; in edge case all zero all become equal.
   - Return World Weights (all non-zero)
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Average hyperparameters together.
-  - Permute them.
-  - Returns blended (possibly mutated) Hyperparameter Values
+  - Permute them for unique workers per round
 
 - `reduce_models(world_weights, model_pytree, communication)`:
   - Use communication.reduce_by_world_weights(world_weights, model_pytree)
@@ -485,28 +508,74 @@ Note to claude: This is clearly out of date. You need to go fix it.
 
 ---
 
-#### TopPopulationStrategy
+#### TopPopulationAsexualStrategy:
+
+**Intention**
+
+Simple algorithm allowing variation between workers with
+a very simple genome strategy. A population is maintained
+that is fit.
+
+All workers recieve the validation results. They are ranked. 
+Each worker indepedently chooses among the top k to move 
+onto the next round. This produces k unique models.
+These models are then perturbed to provide mutations.
+
+**Dependencies**: Perturber, for mutation
+
+**Implementation**:
+- `score(validation_metric, communication)`:
+  - Gather validation metrics from all workers
+  - Sort and keep only the topk
+  - On each worker, independently select a model to move forward
+  - Setup world weights with only that model high (1.0) and all others low (0.0)
+  - 
+- `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
+  - Isolate the hyperparameters from the high parent
+  - Perturb them for mutation purposes.
+  - Returns Hyperparameter Values
+
+- `reduce_models(world_weights, model_pytree, communication)`:
+  - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
+
+- `reduce_optimizer(world_weights, optimizer_pytree, communication)`:
+  - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
+
+#### TopPopulationSexualStrategy
+
+**Intention**
+
+More complex algorithm that involves mothers and fathers. 
+Each worker ranks the results from all workers and keeps 
+the topk, producing a pool of potential mothers and fathers.
+Each worker then independently choose a new mother and father,
+crossbreeds them by averaging everything 50/50, then mutates
+the crossbreed with a random mutation chance.
+
+Note that an important premise of this system is too much
+diverity reduces fitness by making gradient updates incompatible
+with the model state.
+
 **Dependencies**: Crossbreeder (injected with parent_pool_depth, mutation_rate configs)
 
 **Implementation**:
 - `score(validation_metric, communication)`:
   - Gather validation metrics from all workers
-  - Normalize to initial weights
-  - Call Crossbreeder.select_parents(world_weights)
-  - Returns filtered World Weights (2 parents selected, sum=1.0, rest=0.0)
+  - Call Crossbreeder.select_parents(validation_metrics)
+  - Returns filtered World Weights (2 parents selected, each has 505, sum=1.0, rest=0.0)
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Call Crossbreeder.crossbreed_hyperparameters(world_hyperparameters, world_weights)
-  - Blends 2 parents (possibly mutates)
+  - Averages 2 parents with possibility of mutation per allele.
   - Returns Hyperparameter Values
 
 - `reduce_models(world_weights, model_pytree, communication)`:
   - Use communication.reduce_by_world_weights(world_weights, model_pytree)
-  - Blends 2 parent models (weights already filtered)
+  - Averages 2 parent models.
 
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)`:
   - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
-  - Blends 2 parent optimizer states
+  - Averages 2 parent optimizer states.
 
 ---
 
