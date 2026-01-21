@@ -384,7 +384,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 
 **Flow in step(validation_metric)**:
 1. Get local data from State: hyperparams, model_pytree, optimizer_pytree
-2. Gather world_hyperparameters via Communication
+2. Gather world_hyperparameters and validation_metrics via Communication
 3. Call abstract `score(validation_metrics, communication)` → returns World Weights
 4. Call abstract `reduce_hyperparameters(world_weights, world_hyperparameters, communication)` → returns Hyperparameter Values
 5. Call abstract `reduce_models(world_weights, model_pytree, communication)` → returns updated model pytree
