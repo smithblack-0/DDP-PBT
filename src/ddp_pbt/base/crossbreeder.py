@@ -29,7 +29,7 @@ class Crossbreeder:
         self._parent_pool_depth = parent_pool_depth
         self._mutation_rate = mutation_rate
         self._schema = None
-        self._permuter = None
+        self._perturber = None
 
     def setup_schema(self, schema: Dict[str, Dict[str, Any]]) -> None:
         """
@@ -49,14 +49,14 @@ class Crossbreeder:
         """
         self._schema = schema
 
-    def setup_permuter(self, permuter) -> None:
+    def setup_perturber(self, perturber) -> None:
         """
-        Inject Permuter dependency for probabilistic mutation.
+        Inject Perturber dependency for probabilistic mutation.
 
         Args:
-            permuter: Permuter instance for mutating crossbred hyperparameters.
+            perturber: Perturber instance for mutating crossbred hyperparameters.
         """
-        self._permuter = permuter
+        self._perturber = perturber
 
     def select_parents(self, validation_loss: List[float]) -> List[float]:
         """
@@ -71,18 +71,18 @@ class Crossbreeder:
         """
         # Rank workers by weight (descending)
         indexed_weights = [(i, w) for i, w in enumerate(validation_loss)]
-        indexed_weights.sort(key=lambda x: x[1], reverse=True)
+        indexed_weights.sort(key=lambda x: x[1], reverse=False)
         sorted_indexes = [i for i, _ in indexed_weights]
 
         # Get top parent_pool_depth workers
         # Validate we have enough workers
-        if len(world_weights) < 2:
+        if len(validation_loss) < 2:
             raise ValueError(
-                f"Cannot crossbreed with less than 2 workers, got {len(world_weights)}"
+                f"Cannot crossbreed with less than 2 workers, got {len(validation_loss)}"
             )
-        if self._parent_pool_depth > len(world_weights):
+        if self._parent_pool_depth > len(validation_loss):
             raise ValueError(
-                f"parent_pool_depth ({self._parent_pool_depth}) cannot exceed world_size ({len(world_weights)})"
+                f"parent_pool_depth ({self._parent_pool_depth}) cannot exceed world_size ({len(validation_loss)})"
             )
 
         top_pool = sorted_indexes[:self._parent_pool_depth]
@@ -90,7 +90,7 @@ class Crossbreeder:
         # Randomly select 2 parents from pool
         # Both have a 50% selection rate.
         selected_parents = random.sample(top_pool, 2)
-        result_weights = [0.0] * len(world_weights)
+        result_weights = [0.0] * len(validation_loss)
         for parent_idx in selected_parents:
             result_weights[parent_idx] = 0.5
         return result_weights
@@ -136,7 +136,7 @@ class Crossbreeder:
         """
         Mutates a list of alleles. Each mutation has
         a mutation_chance% percentage of happing. The
-        permuter still owns the mutation code.
+        perturber still owns the mutation code.
 
         :param name: The name of the mutation to do
         :param allele_group: The group to mutate
@@ -146,7 +146,7 @@ class Crossbreeder:
         output = []
         for allele in allele_group:
             if random.random() < self._mutation_rate:
-                allele = self._permuter.apply_perturbation(name, allele)
+                allele = self._perturber.apply_perturbation(name, allele)
             output.append(allele)
         return output
 
@@ -168,7 +168,7 @@ class Crossbreeder:
         Blending behavior:
         - Log parameters: blend in log-space, convert back
         - Linear parameters: blend in linear-space
-        - With mutation_rate probability: perturb result via permuter
+        - With mutation_rate probability: perturb result via perturber
         """
         if self._schema is None:
             raise RuntimeError("Must call setup_schema before crossbreed_hyperparameters")
