@@ -28,17 +28,12 @@ class TopScoreStrategy(AbstractStrategy):
     genomes for the system to mutate and evaluate with.
     """
 
-# Note to claude: This has been deliberately broken
-#
-# It is insane to attempt to run a top score strategy
-# without a perturber. How else with the genomes change
-# for examining the variations?
-#    def __init__(
+    def __init__(
         self,
         state: State,
         communication: Communication,
         config: Optional[Dict[str, Dict[str, Any]]] = None,
-        perturber: Optional[Perturber] = None
+        perturber: Perturber = None
     ):
         """
         Initialize TopScoreStrategy.
@@ -47,14 +42,19 @@ class TopScoreStrategy(AbstractStrategy):
             state: State instance for extracting/injecting optimizer data.
             communication: Communication instance for distributed operations.
             config: Optional native JSON schema config dict.
-            perturber: Optional Perturber instance for hyperparameter perturbation.
+            perturber: Perturber instance for hyperparameter perturbation.
+
+        Raises:
+            ValueError: If perturber is None.
         """
+        if perturber is None:
+            raise ValueError("TopScoreStrategy requires a Perturber instance")
+
         super().__init__(state, communication, config)
         self._perturber = perturber
 
-        # Setup perturber schema if both are provided
-        # Delkiberately broken: This was insane.
-#           if self._perturber and self._schema:
+        # Setup perturber schema if schema configured
+        if self._schema:
             self._perturber.setup_schema(self._schema)
 
     def score(self, validation_metrics: List[float], communication: Communication) -> List[float]:
@@ -100,12 +100,8 @@ class TopScoreStrategy(AbstractStrategy):
         # Extract winner's hyperparameters
         winner_hyperparams = world_hyperparameters[winner_index]
 
-        # Perturb if perturber is configured
-        # Note to claudE: Deliberately broken, insane configuration.
-        #if self._perturber:
-            return self._perturber.perturb(winner_hyperparams)
-        else:
-            return winner_hyperparams
+        # Perturb for next round variation
+        return self._perturber.perturb(winner_hyperparams)
 
     def reduce_models(
         self,
