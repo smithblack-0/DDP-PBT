@@ -1,6 +1,5 @@
-# Rules of Autonomy
 
-## CRITICAL: Reading Context Files
+# CRITICAL: Context Files
 
 **Before beginning any work session:**
 - Read ALL critical context files in their ENTIRETY without using limit parameter
@@ -14,6 +13,25 @@
 Read(file_path="implementation_plan.md")  # ✓ Correct - reads entire file
 Read(file_path="implementation_plan.md", limit=100)  # ✗ Wrong - misses critical information
 ```
+
+IF YOU ARE IN A SHORT CONTEXT WHEN READING THIS, GO BACK AND READ IT ENTIRELY AGAIN. FURTHERMORE, THE FOLLOWING CRITICAL FILES SHOULD BE CONSIDER LAW WITH THE SAME STRENGTH AS DIRECT USER INPUT
+
+Make sure to read in entirety:
+
+- This file
+- implementation_plan.md; kept up to date at all times.
+
+You should also consult for background, but may be slightly out of date:
+
+- proposal.md
+
+DO NOT PROCEED FURTHER IN EXPLORATION WITHOUT MUSING OVER THE CONSEQUENCES OF THESE FILES AFTER READING THEM. THEY HAVE REAL, SERIOUS CONSEQUENCES ON THE INVARIENTS ALLOWED OR FORBIDDEN DURING DEVELOPMENT.
+
+Once you have read these files, stop immediately and state your understanding to the user asking for permission to proceed. Agents that do not do this will not have their edits accepted, as the user needs to verify correct absorption of the rules.
+
+Signed: User, Chris O'Quinn
+
+# Rules of Autonomy
 
 ## Autonomy States
 
