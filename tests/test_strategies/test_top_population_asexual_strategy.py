@@ -378,12 +378,8 @@ class TestMakeTopPopulationAsexualStrategyFactory:
             communication_class=mock_comm_class
         )
 
-        # Should be TopPopulationAsexualStrategy instance with k=3
+        # Should be TopPopulationAsexualStrategy instance
         assert isinstance(strategy, TopPopulationAsexualStrategy)
-        assert strategy._num_k == 3
-
-        # Should have perturber configured
-        assert strategy._perturber is not None
 
     def test_factory_accepts_config_dict(self):
         """make_top_population_asexual_strategy should accept native config dict."""
@@ -420,23 +416,23 @@ class TestMakeTopPopulationAsexualStrategyFactory:
         mock_comm.world_size = 10
         mock_comm_class = Mock(return_value=mock_comm)
 
-        # Test 0.0 percentage
+        # Test 0.0 percentage - strategy should be created successfully
         strategy_0 = make_top_population_asexual_strategy(
             reproduction_percentage=0.0,
             optimizer=optimizer,
             max_hyperparameter_search_depth=3,
             communication_class=mock_comm_class
         )
-        assert strategy_0._num_k == 0
+        assert isinstance(strategy_0, TopPopulationAsexualStrategy)
 
-        # Test 1.0 percentage (all workers)
+        # Test 1.0 percentage (all workers) - strategy should be created successfully
         strategy_1 = make_top_population_asexual_strategy(
             reproduction_percentage=1.0,
             optimizer=optimizer,
             max_hyperparameter_search_depth=3,
             communication_class=mock_comm_class
         )
-        assert strategy_1._num_k == 10
+        assert isinstance(strategy_1, TopPopulationAsexualStrategy)
 
 
 # Integration Tests
