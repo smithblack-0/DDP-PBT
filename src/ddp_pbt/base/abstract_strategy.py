@@ -355,7 +355,7 @@ class AbstractStrategy(LRScheduler, ABC):
 
         # Phase 2: Gather world hyperparameters and metrics
         world_hyperparameters = self._communication.gather_pytree_list(local_hyperparams)
-        validation_metrics = self._communicate.gather_pytree_list(validation_metric)
+        validation_metrics = self._communication.gather_pytree_list(validation_metric)
 
         # Phase 3: Call abstract methods (concrete strategy implementations)
         world_weights = self.score(validation_metrics, self._communication)
