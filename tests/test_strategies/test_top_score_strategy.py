@@ -68,12 +68,12 @@ class TestTopScoreStrategyReduceHyperparameters:
 
         communication = Mock(spec=Communication)
 
-        # Create strategy with permuter
-        permuter = Mock()
-        permuter.perturb.return_value = {"lr": [0.0015]}
+        # Create strategy with perturber
+        perturber = Mock()
+        perturber.perturb.return_value = {"lr": [0.0015]}
 
         strategy = TopScoreStrategy(state, communication)
-        strategy._permuter = permuter
+        strategy._perturber = perturber
 
         # Winner is worker 1
         world_weights = [0.0, 1.0, 0.0]
@@ -88,7 +88,7 @@ class TestTopScoreStrategyReduceHyperparameters:
         )
 
         # Should have perturbed winner's values
-        permuter.perturb.assert_called_once_with({"lr": [0.002]})
+        perturber.perturb.assert_called_once_with({"lr": [0.002]})
         assert result == {"lr": [0.0015]}
 
 
@@ -161,8 +161,8 @@ class TestMakeTopScoreStrategyFactory:
         # Should be TopScoreStrategy instance
         assert isinstance(strategy, TopScoreStrategy)
 
-        # Should have permuter configured
-        assert strategy._permuter is not None
+        # Should have perturber configured
+        assert strategy._perturber is not None
 
         # Should be usable with builder pattern
         strategy.bind_log_hyperparameter("lr", std=0.1, min=1e-5)
