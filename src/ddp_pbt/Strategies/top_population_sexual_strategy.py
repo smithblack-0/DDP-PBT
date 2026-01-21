@@ -210,4 +210,4 @@ def make_top_population_sexual_strategy(
     crossbreeder = Crossbreeder(top_k, mutation_rate)
     crossbreeder.setup_perturber(Perturber())
     state = State(optimizer, max_hyperparameter_search_depth)
-    return TopPopulationAsexualStrategy(top_k, state, communicator, crossbreeder, config)
+    return TopPopulationSexualStrategy(top_k, state, communicator, crossbreeder, config)
