@@ -611,6 +611,10 @@ at random instead.
 - NOT: "Suite 1: Get State Tests" or numbered tests
 - Use complete sentences describing what the test verifies
 
+**If you Need White Box Testing**
+- Fantastic the system is working. This means there is a bug in the objects we are testing
+- Since this is a major issue, bring up the issue to the user. 
+- Good design is the only way to pass Black Box Testing, so the tests are also a diagnostic tools for bugs in the architecture. 
 ---
 
 ## Coding Guide
@@ -639,6 +643,7 @@ at random instead.
 - Package __init__.py: Use relative imports, order primitives first (e.g., State before AbstractStrategy)
 - Circular import resolution: Reorder imports so more primitive components come first
 - This style avoids circular import issues by maintaining clear dependency hierarchy
+
 
 ---
 
@@ -766,4 +771,4 @@ The schema is owned by the AbstractStrategy class. All other classes are injecte
 
 ## Final Notes:
 
-Implementers should check src/ddp_pbt/base/utilities before coding anything for relevant utilities. Lots of pytree work in this library
+Implementers should check src/ddp_pbt/base/utilities before coding anything for relevant utilities. Lots of pytree work in this library3
