@@ -205,6 +205,10 @@ def integration_worker(rank, world_size, output_dir, master_addr, master_port):
         strategy.bind_linear_hyperparameter("lr", std=0.001, min=0.001, max=0.1)
         strategy.bind_log_hyperparameter("weight_decay", std=0.1, min=1e-5, max=0.01)
 
+        # Setup schema on state and perturber after binding
+        strategy._state.setup_schema(strategy.schema)
+        strategy._perturber.setup_schema(strategy.schema)
+
         # Run multiple rounds
         results = []
         for round_idx in range(3):
