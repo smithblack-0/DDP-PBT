@@ -7,11 +7,30 @@ Tests validate schema building, orchestration, serialization, and abstract metho
 
 import pytest
 import torch
+import torch.distributed as dist
+import os
 from unittest.mock import Mock, MagicMock
 
 from src.ddp_pbt.base.abstract_strategy import AbstractStrategy
 from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
+
+
+@pytest.fixture(scope="function")
+def distributed_context():
+    """Setup minimal distributed context for testing Communication."""
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
+    os.environ["RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+
+    # Initialize process group
+    dist.init_process_group(backend="gloo", rank=0, world_size=1)
+
+    yield
+
+    # Cleanup
+    dist.destroy_process_group()
 
 
 class ConcreteTestStrategy(AbstractStrategy):
@@ -51,14 +70,14 @@ class ConcreteTestStrategy(AbstractStrategy):
 class TestAbstractStrategyConfiguration:
     """Tests configuration methods and schema building."""
 
-    def test_bind_log_hyperparameter_builds_schema(self):
+    def test_bind_log_hyperparameter_builds_schema(self, distributed_context):
         """bind_log_hyperparameter should add entry to schema."""
         # Create mock optimizer with lr parameter
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.Adam(params, lr=0.001)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         # Bind log hyperparameter
@@ -73,14 +92,14 @@ class TestAbstractStrategyConfiguration:
         assert schema["lr"]["max"] == 1e-1
         assert schema["lr"]["shared"] is True
 
-    def test_bind_linear_hyperparameter_builds_schema(self):
+    def test_bind_linear_hyperparameter_builds_schema(self, distributed_context):
         """bind_linear_hyperparameter should add entry to schema."""
         # Create mock optimizer with weight_decay parameter
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.01)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         # Bind linear hyperparameter
@@ -95,13 +114,13 @@ class TestAbstractStrategyConfiguration:
         assert schema["weight_decay"]["max"] == 0.1
         assert schema["weight_decay"]["shared"] is False
 
-    def test_bind_multiple_hyperparameters(self):
+    def test_bind_multiple_hyperparameters(self, distributed_context):
         """Should support binding multiple hyperparameters."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.01)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         # Bind both
@@ -113,30 +132,30 @@ class TestAbstractStrategyConfiguration:
         assert "lr" in schema
         assert "weight_decay" in schema
 
-    def test_bind_validates_hyperparameter_exists(self):
+    def test_bind_validates_hyperparameter_exists(self, distributed_context):
         """Binding should validate that hyperparameter exists in optimizer."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.Adam(params, lr=0.001)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         # Try to bind non-existent hyperparameter
         with pytest.raises((ValueError, KeyError, RuntimeError)):
             strategy.bind_log_hyperparameter("nonexistent_param", std=0.1, min=1e-5)
 
-    def test_constructor_accepts_config_dict(self):
+    def test_constructor_accepts_config_dict(self, distributed_context):
         """Constructor should accept native JSON config dict."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.01)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
 
         config = {
             "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True},
-            "weight_decay": {"type": "linear", "std": 0.001, "min": 0.0, "max": 0.1, "shared": False}
+            "weight_decay": {"type": "linear", "std": 0.001, "min": 0.0, "max": 0.1, "shared": False},
         }
 
         strategy = ConcreteTestStrategy(state, communication, config)
@@ -149,13 +168,13 @@ class TestAbstractStrategyConfiguration:
 class TestAbstractStrategyProperties:
     """Tests property accessors."""
 
-    def test_valid_binding_targets_delegates_to_state(self):
+    def test_valid_binding_targets_delegates_to_state(self, distributed_context):
         """valid_binding_targets should return bindable hyperparameters from state."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.01)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         targets = strategy.valid_binding_targets
@@ -164,13 +183,13 @@ class TestAbstractStrategyProperties:
         assert any("lr" in str(t) for t in targets)
         assert any("weight_decay" in str(t) for t in targets)
 
-    def test_optimizer_property_exposes_optimizer(self):
+    def test_optimizer_property_exposes_optimizer(self, distributed_context):
         """optimizer property should expose the optimizer from state."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.Adam(params, lr=0.001)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         assert strategy.optimizer is optimizer
@@ -179,13 +198,13 @@ class TestAbstractStrategyProperties:
 class TestAbstractStrategySerialization:
     """Tests state_dict and load_state_dict."""
 
-    def test_state_dict_returns_schema(self):
+    def test_state_dict_returns_schema(self, distributed_context):
         """state_dict should return the schema for checkpointing."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.01)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
         strategy = ConcreteTestStrategy(state, communication)
 
         strategy.bind_log_hyperparameter("lr", std=0.1, min=1e-5)
@@ -196,13 +215,13 @@ class TestAbstractStrategySerialization:
         assert "lr" in schema
         assert "weight_decay" in schema
 
-    def test_load_state_dict_restores_schema(self):
+    def test_load_state_dict_restores_schema(self, distributed_context):
         """load_state_dict should restore schema from checkpoint."""
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.01)
 
         state = State(optimizer)
-        communication = Communication()
+        communication = Communication(suppress_error=True)
 
         # Create first strategy and save schema
         strategy1 = ConcreteTestStrategy(state, communication)
