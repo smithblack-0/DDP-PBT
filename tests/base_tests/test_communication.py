@@ -339,6 +339,39 @@ class TestCommunicationReduceByWorldWeights:
             assert abs(reduced["param1"][0] - 220.0) < 1e-5
 
 
+def single_worker_validation(rank, world_size, output_dir, master_addr, master_port):
+    """Worker function for testing single worker validation."""
+    # Setup environment
+    os.environ["MASTER_ADDR"] = master_addr
+    os.environ["MASTER_PORT"] = master_port
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+
+    # Initialize process group
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    try:
+        # Attempt to create Communication with world_size=1 should fail
+        error_raised = False
+        error_message = ""
+        try:
+            comm = Communication()
+        except EnvironmentError as e:
+            error_raised = True
+            error_message = str(e)
+
+        # Save results
+        output_file = Path(output_dir) / f"rank_{rank}.json"
+        with open(output_file, "w") as f:
+            json.dump({
+                "error_raised": error_raised,
+                "error_message": error_message
+            }, f)
+
+    finally:
+        dist.destroy_process_group()
+
+
 def properties_worker(rank, world_size, output_dir, master_addr, master_port):
     """Worker function for testing world_size and rank properties."""
     # Setup environment
@@ -414,3 +447,29 @@ class TestCommunicationProperties:
                 with open(output_file, "r") as f:
                     data = json.load(f)
                     assert data["rank"] == rank, f"Worker at rank {rank} reports wrong rank"
+
+
+@pytest.mark.distributed
+@pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")
+class TestCommunicationValidation:
+    """Tests validation logic in Communication.__init__."""
+
+    def test_rejects_single_worker(self):
+        """Communication should raise EnvironmentError when world_size == 1."""
+        world_size = 1
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Spawn single worker process
+            mp.spawn(
+                single_worker_validation,
+                args=(world_size, tmpdir, "localhost", "29507"),
+                nprocs=world_size,
+                join=True,
+            )
+
+            # Verify error was raised
+            output_file = Path(tmpdir) / "rank_0.json"
+            with open(output_file, "r") as f:
+                data = json.load(f)
+                assert data["error_raised"], "Communication should raise error for single worker"
+                assert "one worker" in data["error_message"].lower(), "Error message should mention single worker"
