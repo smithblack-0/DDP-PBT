@@ -149,7 +149,7 @@ The runtime representation of hyperparameter values. This is what flows through 
 - Always dict of lists (even for single value)
 - Shared parameters: length-1 list
 - Per-group parameters: length = number of param groups in optimizer
-- Permuter and Crossbreeder consume and produce this format
+- Perturber and Crossbreeder consume and produce this format
 - State extracts this from optimizer and injects it back
 
 ### Tensor PyTrees
@@ -259,7 +259,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 
 ---
 
-### 2. Permuter
+### 2. Perturber
 **Responsibility**: Hyperparameter mutation logic
 
 **Why separate**: All strategies need perturbation, same logic for all
@@ -286,11 +286,11 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 
 **Stateful configuration**:
 - `parent_pool_depth` (int): Number of top workers to draw parents from
-- `mutation_rate` (float): Probability of calling permuter on crossbred result before returning
+- `mutation_rate` (float): Probability of calling perturber on crossbred result before returning
 
 **Interface**:
 1. `setup_schema(schema)` → configure blending behavior for hyperparameters (takes Schema)
-2. `setup_permuter(permuter)` → inject Permuter for probabilistic mutation
+2. `setup_perturber(perturber)` → inject Perturber for probabilistic mutation
 3. `select_parents(validation_losses)` → returns filtered World Weights
    - Ranks workers by weight
    - Randomly selects 2 parents from top parent_pool_depth entries
@@ -301,7 +301,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
    - Blends those two hyperparameter sets with 50% each.
    - For log parameters: converts to log-space, blends, converts back
    - For linear parameters: blends directly
-   - With mutation_rate probability: calls permuter on result
+   - With mutation_rate probability: calls perturber on result
    - Returns blended (possibly mutated) Hyperparameter Values
 
 **Pattern**:
@@ -311,7 +311,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 
 **Dependencies**:
 - Schema (held as reference for hyperparameter blending)
-- Permuter (held as reference for probabilistic mutation)
+- Perturber (held as reference for probabilistic mutation)
 
 ---
 
@@ -402,7 +402,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 **Dependencies**:
 - State (injected) - for extraction/injection
 - Communication (injected) - for gathering distributed data
-- Concrete strategies receive additional dependencies (Permuter, Crossbreeder) via their own injection
+- Concrete strategies receive additional dependencies (Perturber, Crossbreeder) via their own injection
 
 ---
 
@@ -420,17 +420,16 @@ All workers start with the same model, then permute it.
 Best one wins on all workers. We locally permute that 
 model on all workers for the next round. 
 
-**Dependencies**: Permuter (injected)
+**Dependencies**: Perturber (injected)
 
 **Implementation**:
 - `score(validation_metrics, communication)`:
-  - Gather validation metrics from all workers via communication
-  - Find argmax (best worker)
+  - Find argmin (best worker with lowest validation loss)
   - Return World Weights: 1.0 at best index, 0.0 elsewhere
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Extract winner's Hyperparameter Values from world_hyperparameters
-  - Perturb via Permuter
+  - Perturb via Perturber
   - Return perturbed Hyperparameter Values
 
 - `reduce_models(world_weights, model_pytree, communication)`:
@@ -450,22 +449,21 @@ All workers start from the same model. We globally choose one of the topk
 workers to move onto the next round. All workers then permute this into
 a new variation.
 
-**Dependencies**: Permuter (injected)
+**Dependencies**: Perturber (injected)
 
 **Configuration**: k (int) or percent_chosen (float) - number/fraction of top workers to sample from
 
 **Implementation**:
-- `score(validation_metric, communication)`:
-  - Gather validation metrics from all workers
-  - Rank workers by metric
+- `score(validation_metrics, communication)`:
+  - Rank workers by metric (validation_metrics already gathered)
   - Randomly select one from top-K
   - Propose choice
-  - Choose the rank 0's worker's choice. 
+  - Choose the rank 0's worker's choice
   - Return World Weights: 1.0 at selected index, 0.0 elsewhere
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Extract selected worker's Hyperparameter Values
-  - Perturb via Permuter
+  - Perturb via Perturber
   - Return perturbed Hyperparameter Values
 
 - `reduce_models(world_weights, model_pytree, communication)`:
@@ -486,12 +484,11 @@ All workers receive the scores, and form the same weighted average out of this
 score. These weights are then applied in all models producing the same model everywhere.
 This model is then permuted.
 
-**Dependencies**: Permuter
+**Dependencies**: Perturber
 
 **Implementation**:
-- `score(validation_metric, communication)`:
-  - Gather validation metrics from all workers.
-  - Normalize to weights: subtract min, then normalize to sum=1; in edge case all zero all become equal.
+- `score(validation_metrics, communication)`:
+  - Normalize metrics to weights: subtract min, then normalize to sum=1; in edge case all zero all become equal
   - Return World Weights (all non-zero)
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
@@ -524,12 +521,10 @@ These models are then perturbed to provide mutations.
 **Dependencies**: Perturber, for mutation
 
 **Implementation**:
-- `score(validation_metric, communication)`:
-  - Gather validation metrics from all workers
-  - Sort and keep only the topk
+- `score(validation_metrics, communication)`:
+  - Sort workers by metrics and keep only the topk
   - On each worker, independently select a model to move forward
   - Setup world weights with only that model high (1.0) and all others low (0.0)
-  - 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Isolate the hyperparameters from the high parent
   - Perturb them for mutation purposes.
@@ -559,10 +554,9 @@ with the model state.
 **Dependencies**: Crossbreeder (injected with parent_pool_depth, mutation_rate configs)
 
 **Implementation**:
-- `score(validation_metric, communication)`:
-  - Gather validation metrics from all workers
+- `score(validation_metrics, communication)`:
   - Call Crossbreeder.select_parents(validation_metrics)
-  - Returns filtered World Weights (2 parents selected, each has 505, sum=1.0, rest=0.0)
+  - Returns filtered World Weights (2 parents selected, each has 0.5, sum=1.0, rest=0.0)
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Call Crossbreeder.crossbreed_hyperparameters(world_hyperparameters, world_weights)
@@ -665,7 +659,7 @@ with the model state.
 **Implementation Approach**
 
 Start with base components, test in isolation, then build up to strategies:
-1. Implement and test individual base components (State, Permuter, Crossbreeder, Communication)
+1. Implement and test individual base components (State, Perturber, Crossbreeder, Communication)
 2. Implement AbstractStrategy with configuration loading
 3. Implement simplest strategy first (TopScoreStrategy) to validate design
 5. End-to-end test with toy model; use GLOO backend. 
@@ -678,7 +672,7 @@ Start with base components, test in isolation, then build up to strategies:
 
 **Base components** (reusable infrastructure):
 - State - tensor extraction/injection
-- Permuter - hyperparameter mutation
+- Perturber - hyperparameter mutation
 - Crossbreeder - hyperparameter blending
 - Communication - distributed operations
 - AbstractStrategy - base class with orchestration
@@ -701,7 +695,7 @@ Start with base components, test in isolation, then build up to strategies:
 Each concrete strategy has a factory function colocated in its module that:
 - Creates State(optimizer)
 - Creates Communication()
-- Creates Permuter() and/or Crossbreeder() as needed by that strategy
+- Creates Perturber() and/or Crossbreeder() as needed by that strategy
 - Creates ConcreteStrategy(state, communication, config)
 - Wires all dependencies together
 - Returns ready-to-use strategy instance
@@ -715,9 +709,9 @@ Example factory signature:
 def make_top_score_strategy(optimizer, config={}) -> TopScoreStrategy:
     state = State(optimizer)
     communication = Communication()
-    permuter = Permuter()
+    perturber = Perturber()
     strategy = TopScoreStrategy(state, communication, config)
-    # Permuter injected into strategy during construction
+    # Perturber injected into strategy during construction
     return strategy
 ```
 
@@ -733,7 +727,7 @@ def make_top_score_strategy(optimizer, config={}) -> TopScoreStrategy:
 - Testable via mocking
 - Encapsulates distributed concerns
 
-### Why Permuter and Crossbreeder are separate
+### Why Perturber and Crossbreeder are separate
 - Shared logic across strategies that use them
 - Crossbreeder is stateful (holds parent_pool_depth, mutation_rate config)
 - Crossbreeder provides two operations: select parents, crossbreed hyperparameters
