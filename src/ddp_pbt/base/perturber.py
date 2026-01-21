@@ -1,5 +1,5 @@
 """
-Permuter: Hyperparameter mutation logic.
+Perturber: Hyperparameter mutation logic.
 
 Handles perturbation of hyperparameter values using normal sampling in either
 linear or log-space, with optional bounds clipping.
@@ -18,7 +18,7 @@ class Perturber:
     """
 
     def __init__(self):
-        """Initialize Permuter with no schema (must call setup_schema)."""
+        """Initialize Perturber with no schema (must call setup_schema)."""
         self._schema = None
 
     def setup_schema(self, schema: Dict[str, Dict[str, Any]]) -> None:
