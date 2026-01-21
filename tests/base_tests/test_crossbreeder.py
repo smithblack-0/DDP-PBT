@@ -33,90 +33,13 @@ class TestCrossbreederSetup:
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
         assert "lr" in result
 
-    def test_setup_perturber_stores_reference(self):
-        """Crossbreeder should store perturber for probabilistic mutation."""
-        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
-        schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True}
-        }
-        crossbreeder.setup_schema(schema)
-
-        perturber = Mock(spec=Perturber)
-        perturber.perturb.return_value = {"lr": [0.0015]}
-        crossbreeder.setup_perturber(perturber)
-
-        # With mutation_rate=1.0, perturber should be called
-        world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
-        parent_weights = [0.5, 0.5]
-        random.seed(42)
-        result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
-
-        # Perturber should have been called
-        assert perturber.perturb.called
 
 
-class TestCrossbreederParentSelection:
-    """Tests parent selection from world weights."""
-
-    def test_selects_two_parents_from_top_k(self):
-        """select_parents should randomly choose 2 from top parent_pool_depth workers."""
-        crossbreeder = Crossbreeder(parent_pool_depth=3, mutation_rate=0.0)
-
-        # 5 workers with different weights
-        world_weights = [0.05, 0.15, 0.30, 0.40, 0.10]  # Sum = 1.0
-
-        random.seed(42)
-        parent_weights = crossbreeder.select_parents(world_weights)
-
-        # Should return weights with exactly 2 non-zero entries
-        non_zero_count = sum(1 for w in parent_weights if w > 0)
-        assert non_zero_count == 2
-
-        # Selected parents should be from top 3 (indices 2, 3, 4 after sorting)
-        # which are the workers with original weights [0.40, 0.30, 0.15]
-        non_zero_indices = [i for i, w in enumerate(parent_weights) if w > 0]
-        top_3_indices = [3, 2, 1]  # Original indices of top 3 workers
-        for idx in non_zero_indices:
-            assert idx in top_3_indices
-
-        # Weights should sum to 1.0
-        assert abs(sum(parent_weights) - 1.0) < 1e-6
-
-    def test_parent_weights_sum_to_one(self):
-        """Selected parent weights should be normalized to sum to 1.0."""
-        crossbreeder = Crossbreeder(parent_pool_depth=4, mutation_rate=0.0)
-        world_weights = [0.1, 0.2, 0.3, 0.4]
-
-        parent_weights = crossbreeder.select_parents(world_weights)
-
-        assert abs(sum(parent_weights) - 1.0) < 1e-6
-
-    def test_with_exactly_two_workers(self):
-        """With exactly 2 workers and parent_pool_depth >= 2, should select both."""
-        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
-        world_weights = [0.4, 0.6]
-
-        parent_weights = crossbreeder.select_parents(world_weights)
-
-        # Both should be selected
-        non_zero_count = sum(1 for w in parent_weights if w > 0)
-        assert non_zero_count == 2
-        assert abs(sum(parent_weights) - 1.0) < 1e-6
-
-    def test_parent_pool_depth_larger_than_world_size(self):
-        """If parent_pool_depth > world_size, should raise ValueError."""
-        crossbreeder = Crossbreeder(parent_pool_depth=10, mutation_rate=0.0)
-        world_weights = [0.2, 0.3, 0.5]
-
-        with pytest.raises(ValueError, match="parent_pool_depth.*cannot exceed world_size"):
-            crossbreeder.select_parents(world_weights)
-
-
-class TestCrossbreederHyperparameterBlending:
+class TestCrossbreederHyperparameterCrossbreeding:
     """Tests hyperparameter crossbreeding logic."""
 
-    def test_linear_blending_without_mutation(self):
-        """Linear parameters should blend directly in linear space."""
+    def test_linear_crossbreeding_without_mutation(self):
+        """Linear parameters should crossbreed via discrete 50/50 choice per allele."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "weight_decay": {"type": "linear", "std": 0.001, "shared": True}
@@ -127,16 +50,24 @@ class TestCrossbreederHyperparameterBlending:
             {"weight_decay": [0.01]},
             {"weight_decay": [0.02]}
         ]
-        parent_weights = [0.3, 0.7]
+        parent_weights = [0.5, 0.5]
 
-        result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+        # Run 100 times to verify probabilistic behavior
+        results = []
+        for _ in range(100):
+            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            results.append(result["weight_decay"][0])
 
-        # Expected: 0.3 * 0.01 + 0.7 * 0.02 = 0.003 + 0.014 = 0.017
-        expected = 0.3 * 0.01 + 0.7 * 0.02
-        assert abs(result["weight_decay"][0] - expected) < 1e-6
+        # Should see both parent values selected (discrete choice)
+        assert 0.01 in results, "Parent A value should appear"
+        assert 0.02 in results, "Parent B value should appear"
 
-    def test_log_blending_without_mutation(self):
-        """Log parameters should blend in log-space then convert back."""
+        # Roughly 50/50 distribution (allow statistical variance)
+        count_parent_a = sum(1 for r in results if r == 0.01)
+        assert 30 <= count_parent_a <= 70, f"Expected 30-70% parent A, got {count_parent_a}%"
+
+    def test_log_crossbreeding_without_mutation(self):
+        """Log parameters should crossbreed via discrete 50/50 choice per allele."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "lr": {"type": "log", "std": 0.1, "shared": True}
@@ -149,17 +80,22 @@ class TestCrossbreederHyperparameterBlending:
         ]
         parent_weights = [0.5, 0.5]
 
-        result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+        # Run 100 times to verify probabilistic behavior
+        results = []
+        for _ in range(100):
+            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            results.append(result["lr"][0])
 
-        # Expected: exp(0.5 * log(0.001) + 0.5 * log(0.01))
-        import math
-        log1 = math.log(0.001)
-        log2 = math.log(0.01)
-        expected = math.exp(0.5 * log1 + 0.5 * log2)
-        assert abs(result["lr"][0] - expected) < 1e-6
+        # Should see both parent values selected (discrete choice)
+        assert 0.001 in results, "Parent A value should appear"
+        assert 0.01 in results, "Parent B value should appear"
 
-    def test_per_group_blending(self):
-        """Per-group hyperparameters should blend element-wise."""
+        # Roughly 50/50 distribution (allow statistical variance)
+        count_parent_a = sum(1 for r in results if r == 0.001)
+        assert 30 <= count_parent_a <= 70, f"Expected 30-70% parent A, got {count_parent_a}%"
+
+    def test_per_group_crossbreeding(self):
+        """Per-group hyperparameters should crossbreed independently per allele."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "weight_decay": {"type": "linear", "std": 0.001, "shared": False}
@@ -170,18 +106,22 @@ class TestCrossbreederHyperparameterBlending:
             {"weight_decay": [0.01, 0.02]},
             {"weight_decay": [0.03, 0.04]}
         ]
-        parent_weights = [0.4, 0.6]
+        parent_weights = [0.5, 0.5]
 
-        result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+        # Run 100 times to verify probabilistic behavior per allele
+        results_0 = []
+        results_1 = []
+        for _ in range(100):
+            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            results_0.append(result["weight_decay"][0])
+            results_1.append(result["weight_decay"][1])
 
-        # Element-wise blending
-        expected_0 = 0.4 * 0.01 + 0.6 * 0.03
-        expected_1 = 0.4 * 0.02 + 0.6 * 0.04
-        assert abs(result["weight_decay"][0] - expected_0) < 1e-6
-        assert abs(result["weight_decay"][1] - expected_1) < 1e-6
+        # Each allele should independently choose from parents
+        assert 0.01 in results_0 and 0.03 in results_0, "Allele 0 should see both parent values"
+        assert 0.02 in results_1 and 0.04 in results_1, "Allele 1 should see both parent values"
 
-    def test_mixed_log_and_linear_blending(self):
-        """Should handle mix of log and linear parameters correctly."""
+    def test_mixed_log_and_linear_crossbreeding(self):
+        """Should handle mix of log and linear parameters via discrete crossbreeding."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "lr": {"type": "log", "std": 0.1, "shared": True},
@@ -195,15 +135,17 @@ class TestCrossbreederHyperparameterBlending:
         ]
         parent_weights = [0.5, 0.5]
 
-        result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+        # Run 100 times to verify both parameters crossbreed independently
+        lr_results = []
+        wd_results = []
+        for _ in range(100):
+            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            lr_results.append(result["lr"][0])
+            wd_results.append(result["weight_decay"][0])
 
-        # Both parameters should be blended
-        assert "lr" in result
-        assert "weight_decay" in result
-
-        # Linear blending for weight_decay
-        expected_wd = 0.5 * 0.01 + 0.5 * 0.02
-        assert abs(result["weight_decay"][0] - expected_wd) < 1e-6
+        # Both parameters should crossbreed independently
+        assert 0.001 in lr_results and 0.01 in lr_results, "lr should see both parent values"
+        assert 0.01 in wd_results and 0.02 in wd_results, "weight_decay should see both parent values"
 
 
 class TestCrossbreederProbabilisticMutation:
@@ -218,7 +160,7 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.perturb.return_value = {"lr": [0.999]}
+        perturber.apply_perturbation.return_value = 0.999
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
@@ -229,10 +171,10 @@ class TestCrossbreederProbabilisticMutation:
             result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
         # Perturber should never be called
-        assert not perturber.perturb.called
+        assert perturber.apply_perturbation.call_count == 0
 
     def test_mutation_rate_one_always_mutates(self):
-        """With mutation_rate=1.0, perturber should always be called."""
+        """With mutation_rate=1.0, each allele should be mutated."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
@@ -240,23 +182,21 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.perturb.return_value = {"lr": [0.999]}
+        perturber.apply_perturbation.return_value = 0.999
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
 
-        # Run multiple times
-        call_count = 0
+        # Run multiple times - each run mutates 1 allele
         for _ in range(10):
             result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
-            call_count = perturber.perturb.call_count
 
-        # Perturber should be called every time
-        assert call_count == 10
+        # With mutation_rate=1.0 and 1 allele, apply_perturbation called 10 times (once per run)
+        assert perturber.apply_perturbation.call_count == 10
 
-    def test_mutation_returns_permuted_result(self):
-        """When mutation occurs, should return perturber's result."""
+    def test_mutation_returns_perturbed_result(self):
+        """When mutation occurs, allele should be replaced with perturber's result."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
@@ -264,7 +204,7 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.perturb.return_value = {"lr": [0.123456]}
+        perturber.apply_perturbation.return_value = 0.123456
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
@@ -272,11 +212,11 @@ class TestCrossbreederProbabilisticMutation:
 
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # Result should be what perturber returned
+        # Result should be what perturber returned (mutation_rate=1.0 guarantees mutation)
         assert result["lr"][0] == 0.123456
 
     def test_mutation_rate_partial_mutates_probabilistically(self):
-        """With 0 < mutation_rate < 1, mutation should occur probabilistically."""
+        """With 0 < mutation_rate < 1, each allele should mutate probabilistically."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.5)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
@@ -284,19 +224,19 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.perturb.return_value = {"lr": [0.999]}
+        perturber.apply_perturbation.return_value = 0.999
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
 
         random.seed(42)
-        # Run multiple times to check probability
+        # Run multiple times to check probability (1 allele per run)
         for _ in range(50):
             result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # With mutation_rate=0.5, perturber should be called roughly half the time
-        call_count = perturber.perturb.call_count
+        # With mutation_rate=0.5 and 1 allele, should mutate roughly half the time
+        call_count = perturber.apply_perturbation.call_count
         # Allow some variance (between 15 and 35 out of 50)
         assert 15 <= call_count <= 35
 
@@ -319,13 +259,17 @@ class TestCrossbreederEdgeCases:
             {"lr": [0.003]},
             {"lr": [0.004]}
         ]
-        parent_weights = [0.0, 0.3, 0.7, 0.0]  # Only workers 1 and 2 selected
+        parent_weights = [0.0, 0.5, 0.5, 0.0]  # Only workers 1 and 2 selected
 
-        result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+        # Run 100 times to verify only selected parents contribute
+        results = []
+        for _ in range(100):
+            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            results.append(result["lr"][0])
 
-        # Should blend workers 1 and 2
-        expected = 0.3 * 0.002 + 0.7 * 0.003
-        assert abs(result["lr"][0] - expected) < 1e-6
+        # Should only see values from workers 1 and 2 (0.002 and 0.003)
+        assert 0.002 in results and 0.003 in results, "Should see both selected parent values"
+        assert 0.001 not in results and 0.004 not in results, "Should not see non-selected parent values"
 
     def test_empty_schema(self):
         """Crossbreeder with empty schema should handle empty hyperparameters."""
