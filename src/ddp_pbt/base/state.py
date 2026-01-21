@@ -9,9 +9,6 @@ from collections import defaultdict
 import torch
 
 from .utilities import walk_single_pytree, patch_pytree
-# Note to Claude: You may wander in here to fix the fact it throws rather than
-# warns. Don't fix that. Instead, go fix the implementation plan if needed.
-# Then remove this note. It is now supposed to throw in those cases.
 
 class State:
     """

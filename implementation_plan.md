@@ -412,33 +412,38 @@ Each strategy implements the 4 abstract methods coherently. Dependencies are inj
 
 #### TopScoreStrategy
 
-Note to claude: This is clearly out of date. You need to go fix it.
-
 **Intention**:
 
-All workers start with the same model, then permute it.
-Best one wins on all workers. We locally permute that 
-model on all workers for the next round. 
+Simplest PBT strategy. All workers start with the same model and hyperparameters.
+Each worker independently perturbs hyperparameters at round start to explore different
+configurations while sharing gradients via DDP during training. At round end, all workers
+identify the best performer (lowest validation loss), adopt that worker's model and
+optimizer state, perturb the winning hyperparameters, and continue. This creates exploration
+through hyperparameter variation while keeping all workers synchronized on the best model.
 
-**Dependencies**: Perturber (injected)
+**Dependencies**: Perturber (injected for hyperparameter mutation)
 
 **Implementation**:
 - `score(validation_metrics, communication)`:
   - Find argmin (best worker with lowest validation loss)
-  - Return World Weights: 1.0 at best index, 0.0 elsewhere
+  - Return World Weights: 1.0 at best worker index, 0.0 elsewhere
+  - All workers compute same selection deterministically
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
-  - Extract winner's Hyperparameter Values from world_hyperparameters
-  - Perturb via Perturber
+  - Extract winner's Hyperparameter Values using world_weights (index of 1.0)
+  - Perturb winner's values via Perturber for next round variation
   - Return perturbed Hyperparameter Values
+  - All workers get same perturbed values (deterministic if seeds synced)
 
 - `reduce_models(world_weights, model_pytree, communication)`:
   - Use communication.reduce_by_world_weights(world_weights, model_pytree)
-  - Returns winner's model (weights filter out others)
+  - World weights are one-hot (1.0 at winner, 0.0 elsewhere)
+  - Returns winner's model parameters to all workers
 
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)`:
   - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
-  - Returns winner's optimizer state
+  - World weights are one-hot (1.0 at winner, 0.0 elsewhere)
+  - Returns winner's optimizer state (momentum, etc.) to all workers
 ---
 
 #### TopKStrategy
@@ -489,7 +494,7 @@ This model is then permuted.
 **Implementation**:
 - `score(validation_metrics, communication)`:
   - Normalize metrics to weights: subtract min, then normalize to sum=1; in edge case all zero all become equal
-  - Return World Weights (all non-zero)
+  - Return World Weights
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Average hyperparameters together.
@@ -544,12 +549,12 @@ More complex algorithm that involves mothers and fathers.
 Each worker ranks the results from all workers and keeps 
 the topk, producing a pool of potential mothers and fathers.
 Each worker then independently choose a new mother and father,
-crossbreeds them by averaging everything 50/50, then mutates
-the crossbreed with a random mutation chance.
+crossbreeds their hyperparameter genome by randomly choosing 
+one or the other entry at each step, and then follows this 
+up by a mutation chance in the hyperparameter genome. 
+Notably, the next model and optimizer state is chosen essentially
+at random instead. 
 
-Note that an important premise of this system is too much
-diverity reduces fitness by making gradient updates incompatible
-with the model state.
 
 **Dependencies**: Crossbreeder (injected with parent_pool_depth, mutation_rate configs)
 
@@ -560,16 +565,18 @@ with the model state.
 
 - `reduce_hyperparameters(world_weights, world_hyperparameters, communication)`:
   - Call Crossbreeder.crossbreed_hyperparameters(world_hyperparameters, world_weights)
-  - Averages 2 parents with possibility of mutation per allele.
+  - Blends two parents with a 50% chance of drawing the allele from each parent
   - Returns Hyperparameter Values
 
 - `reduce_models(world_weights, model_pytree, communication)`:
-  - Use communication.reduce_by_world_weights(world_weights, model_pytree)
-  - Averages 2 parent models.
+  - Isolates the two parent indexes
+  - Randomly choses one. That is the downstream model
+  - Use communication.reduce_by_world_size(world_weights, model_pytree) with a one-hot; sparse so fine.
+  - Store which was chosen for optimizer
 
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)`:
+  - Loop up parent choice
   - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
-  - Averages 2 parent optimizer states.
 
 ---
 
@@ -717,6 +724,10 @@ def make_top_score_strategy(optimizer, config={}) -> TopScoreStrategy:
 
 ## Key Design Decisions
 
+### Schema is a reference.
+
+The schema is owned by the AbstractStrategy class. All other classes are injected a reference to it where needed, that can be mutated by AbstractStrategy.
+
 ### Why State is separate
 - state_dict() contains non-blendable metadata (bools, ints, structure)
 - Clean extraction of tensors for communication
@@ -755,4 +766,4 @@ def make_top_score_strategy(optimizer, config={}) -> TopScoreStrategy:
 
 ## Final Notes:
 
-Implementers should check src/ddp_pbt/base/utilities before coding anything for relevant utilities. Lots of pytree work in this library!
+Implementers should check src/ddp_pbt/base/utilities before coding anything for relevant utilities. Lots of pytree work in this library

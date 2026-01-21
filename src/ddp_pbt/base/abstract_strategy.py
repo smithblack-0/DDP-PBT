@@ -191,7 +191,10 @@ class AbstractStrategy(LRScheduler, ABC):
         # Validate schema if provided
         if self._schema:
             validate_schema(self._schema)
-            self._state.setup_schema(self._schema)
+
+        # Always setup schema on state (even if empty) so it holds reference
+        # This allows bind methods to update schema and have State see changes
+        self._state.setup_schema(self._schema)
 
         self._finished_setup = True
 

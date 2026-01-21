@@ -5,14 +5,82 @@ TopScoreStrategy selects the best-performing worker and perturbs their hyperpara
 Tests validate scoring logic, hyperparameter perturbation, and model/optimizer reduction.
 """
 
-import torch
+import os
+import sys
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock
+
+import pytest
+import torch
+import torch.multiprocessing as mp
+import torch.distributed as dist
 
 from src.ddp_pbt.Strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
 from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
 
+
+# Test Fixtures and Helpers
+
+def integration_worker(rank, world_size, output_dir, master_addr, master_port):
+    """Worker function for integration test."""
+    # Setup environment
+    os.environ["MASTER_ADDR"] = master_addr
+    os.environ["MASTER_PORT"] = master_port
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+
+    # Initialize process group
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    try:
+        # Create simple model
+        model = torch.nn.Linear(10, 1)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.001)
+
+        # Create strategy and bind hyperparameters
+        strategy = make_top_score_strategy(optimizer)
+        strategy.bind_linear_hyperparameter("lr", std=0.001, min=0.001, max=0.1)
+        strategy.bind_log_hyperparameter("weight_decay", std=0.1, min=1e-5, max=0.01)
+
+        # Run multiple rounds
+        results = []
+        for round_idx in range(3):
+            # Simulate training - just record current hyperparams
+            current_lr = optimizer.param_groups[0]['lr']
+            current_wd = optimizer.param_groups[0]['weight_decay']
+
+            # Simulate validation loss (rank 0 best in round 0, rank 1 best in round 1)
+            if round_idx == 0:
+                val_loss = 1.0 if rank == 0 else 2.0
+            elif round_idx == 1:
+                val_loss = 2.0 if rank == 0 else 1.0
+            else:
+                val_loss = float(rank + 1)
+
+            results.append({
+                "round": round_idx,
+                "lr": current_lr,
+                "weight_decay": current_wd,
+                "val_loss": val_loss
+            })
+
+            # Step strategy
+            strategy.step(val_loss)
+
+        # Save results
+        output_file = Path(output_dir) / f"rank_{rank}.json"
+        with open(output_file, "w") as f:
+            json.dump({"results": results}, f)
+
+    finally:
+        dist.destroy_process_group()
+
+
+# Unit Tests
 
 class TestTopScoreStrategyScoring:
     """Tests score method that finds best worker."""
@@ -39,7 +107,6 @@ class TestTopScoreStrategyScoring:
         assert world_weights[0] == 0.0
         assert world_weights[2] == 0.0
         assert sum(world_weights) == 1.0
-
 
 
 class TestTopScoreStrategyReduceHyperparameters:
@@ -136,6 +203,52 @@ class TestTopScoreStrategyReduceOptimizer:
         assert result == expected_result
 
 
+class TestTopScoreStrategyStep:
+    """Tests step() orchestration method."""
+
+    def test_step_orchestrates_full_round(self):
+        """step() should orchestrate extraction, gathering, scoring, reduction, and injection."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        # Setup mocks
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.tensor([1.0])}
+        state.get_optimizer_tensors.return_value = {"state1": torch.tensor([2.0])}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.side_effect = [
+            [{"lr": [0.001]}, {"lr": [0.002]}],  # world_hyperparameters
+            [0.5, 0.3]  # validation_metrics
+        ]
+        communication.reduce_by_world_weights.side_effect = [
+            {"param1": torch.tensor([1.5])},  # reduced model
+            {"state1": torch.tensor([2.5])}   # reduced optimizer
+        ]
+
+        perturber = Mock(spec=Perturber)
+        perturber.perturb.return_value = {"lr": [0.0015]}
+
+        strategy = TopScoreStrategy(state, communication, perturber=perturber)
+
+        # Call step
+        strategy.step(0.5)
+
+        # Verify orchestration
+        state.get_hyperparam_values.assert_called_once()
+        state.get_model_tensors.assert_called_once()
+        state.get_optimizer_tensors.assert_called_once()
+
+        assert communication.gather_pytree_list.call_count == 2
+        perturber.perturb.assert_called_once()
+
+        state.set_hyperparam_values.assert_called_once_with({"lr": [0.0015]})
+        state.set_model_tensors.assert_called_once()
+        state.set_optimizer_tensors.assert_called_once()
+
+
 class TestMakeTopScoreStrategyFactory:
     """Tests factory function that wires up TopScoreStrategy with dependencies."""
 
@@ -175,76 +288,7 @@ class TestMakeTopScoreStrategyFactory:
         assert strategy.schema == config
 
 
-import os
-import sys
-import json
-import tempfile
-from pathlib import Path
-import torch.multiprocessing as mp
-import torch.distributed as dist
-
-
-def integration_worker(rank, world_size, output_dir, master_addr, master_port):
-    """Worker function for integration test."""
-    # Setup environment
-    os.environ["MASTER_ADDR"] = master_addr
-    os.environ["MASTER_PORT"] = master_port
-    os.environ["RANK"] = str(rank)
-    os.environ["WORLD_SIZE"] = str(world_size)
-
-    # Initialize process group
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-
-    try:
-        # Create simple model
-        model = torch.nn.Linear(10, 1)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.001)
-
-        # Create strategy and bind hyperparameters
-        strategy = make_top_score_strategy(optimizer)
-        strategy.bind_linear_hyperparameter("lr", std=0.001, min=0.001, max=0.1)
-        strategy.bind_log_hyperparameter("weight_decay", std=0.1, min=1e-5, max=0.01)
-
-        # Setup schema on state and perturber after binding
-        strategy._state.setup_schema(strategy.schema)
-        strategy._perturber.setup_schema(strategy.schema)
-
-        # Run multiple rounds
-        results = []
-        for round_idx in range(3):
-            # Simulate training - just record current hyperparams
-            current_lr = optimizer.param_groups[0]['lr']
-            current_wd = optimizer.param_groups[0]['weight_decay']
-
-            # Simulate validation loss (rank 0 best in round 0, rank 1 best in round 1)
-            if round_idx == 0:
-                val_loss = 1.0 if rank == 0 else 2.0
-            elif round_idx == 1:
-                val_loss = 2.0 if rank == 0 else 1.0
-            else:
-                val_loss = float(rank + 1)
-
-            results.append({
-                "round": round_idx,
-                "lr": current_lr,
-                "weight_decay": current_wd,
-                "val_loss": val_loss
-            })
-
-            # Step strategy
-            strategy.step(val_loss)
-
-        # Save results
-        output_file = Path(output_dir) / f"rank_{rank}.json"
-        with open(output_file, "w") as f:
-            json.dump({"results": results}, f)
-
-    finally:
-        dist.destroy_process_group()
-
-
-import pytest
-
+# Integration Tests
 
 @pytest.mark.distributed
 @pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")

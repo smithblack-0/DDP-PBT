@@ -5,7 +5,7 @@ Simplest PBT strategy - finds the worker with best validation metric,
 adopts their hyperparameters (with perturbation), model, and optimizer state.
 """
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Type
 import torch
 
 from ..base.abstract_strategy import AbstractStrategy
@@ -52,10 +52,7 @@ class TopScoreStrategy(AbstractStrategy):
 
         super().__init__(state, communication, config)
         self._perturber = perturber
-
-        # Setup perturber schema if schema configured
-        if self._schema:
-            self._perturber.setup_schema(self._schema)
+        self._perturber.setup_schema(self._schema)
 
     def score(self, validation_metrics: List[float], communication: Communication) -> List[float]:
         """
@@ -146,7 +143,7 @@ def make_top_score_strategy(
     optimizer: torch.optim.Optimizer,
     max_hyperparameter_search_depth: int = 3,
     config: Optional[Dict[str, Dict[str, Any]]] = None,
-    communication_class: type = Communication
+    communication_class: Type[Communication] = Communication
 ) -> TopScoreStrategy:
     """
     Factory function to create fully-wired TopScoreStrategy.
