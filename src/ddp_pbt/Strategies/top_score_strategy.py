@@ -5,13 +5,14 @@ Simplest PBT strategy - finds the worker with best validation metric,
 adopts their hyperparameters (with perturbation), model, and optimizer state.
 """
 
-from typing import List, Dict, Optional, Any, Type
+from typing import Any, Dict, List, Optional, Type
+
 import torch
 
 from ..base.abstract_strategy import AbstractStrategy
-from ..base.state import State
 from ..base.communication import Communication
 from ..base.perturber import Perturber
+from ..base.state import State
 
 
 class TopScoreStrategy(AbstractStrategy):
@@ -33,7 +34,7 @@ class TopScoreStrategy(AbstractStrategy):
         state: State,
         communication: Communication,
         config: Optional[Dict[str, Dict[str, Any]]] = None,
-        perturber: Perturber = None
+        perturber: Perturber = None,
     ):
         """
         Initialize TopScoreStrategy.
@@ -78,7 +79,7 @@ class TopScoreStrategy(AbstractStrategy):
         self,
         world_weights: List[float],
         world_hyperparameters: List[Dict[str, List[float]]],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, List[float]]:
         """
         Select winner's hyperparameters and perturb.
@@ -104,7 +105,7 @@ class TopScoreStrategy(AbstractStrategy):
         self,
         world_weights: List[float],
         model_pytree: Dict[str, torch.Tensor],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduce model parameters (selects winner via world weights).
@@ -123,7 +124,7 @@ class TopScoreStrategy(AbstractStrategy):
         self,
         world_weights: List[float],
         optimizer_pytree: Dict[str, torch.Tensor],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduce optimizer state (selects winner via world weights).
@@ -143,7 +144,7 @@ def make_top_score_strategy(
     optimizer: torch.optim.Optimizer,
     max_hyperparameter_search_depth: int = 3,
     config: Optional[Dict[str, Dict[str, Any]]] = None,
-    communication_class: Type[Communication] = Communication
+    communication_class: Type[Communication] = Communication,
 ) -> TopScoreStrategy:
     """
     Factory function to create fully-wired TopScoreStrategy.

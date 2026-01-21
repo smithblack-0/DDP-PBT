@@ -8,11 +8,11 @@ These tests validate that the public walking utilities:
 - Respect the max_depth contract, including the unlimited sentinel (-1).
 """
 
-from typing import List, Tuple, Any, Dict
+from typing import Any, Dict, List, Tuple
 
 import pytest
 
-from src.ddp_pbt.base.utilities import walk_pytree_collection, walk_single_pytree, patch_pytree
+from src.ddp_pbt.base.utilities import patch_pytree, walk_pytree_collection, walk_single_pytree
 
 
 @pytest.fixture
@@ -56,6 +56,7 @@ def dict_order_pair() -> Tuple[dict, dict]:
     peer = {"b": 20, "a": 10}
     return root, peer
 
+
 @pytest.fixture
 def patch_base_tree_dict() -> Dict[str, Any]:
     """A small dict pytree with both leaves and a nested branch."""
@@ -81,14 +82,17 @@ class TestWalkPytreeCollectionContract:
     """Tests that walk_pytree_collection honors the public traversal and schema contracts."""
 
     def test_walk_pytree_collection_yields_expected_leaf_stream_in_deterministic_order(
-        self, nested_pair_and_expected
+        self,
+        nested_pair_and_expected,
     ) -> None:
         """Walk pytree collection yields the full expected leaf stream in a deterministic order."""
         a, b, expected = nested_pair_and_expected
         got = list(walk_pytree_collection(a, b, max_depth=-1))
         assert got == expected
 
-    def test_walk_pytree_collection_preserves_root_dict_insertion_order(self, dict_order_pair) -> None:
+    def test_walk_pytree_collection_preserves_root_dict_insertion_order(
+        self, dict_order_pair
+    ) -> None:
         """Walk pytree collection yields dict leaves in the root insertion order."""
         root, peer = dict_order_pair
         got = list(walk_pytree_collection(root, peer, max_depth=-1))
@@ -189,7 +193,9 @@ class TestWalkSinglePytreeContract:
             ("state/exp_avg/1", 2),
         ]
 
-    def test_walk_single_pytree_matches_collection_unwrap_semantics(self, nested_pair_and_expected) -> None:
+    def test_walk_single_pytree_matches_collection_unwrap_semantics(
+        self, nested_pair_and_expected
+    ) -> None:
         """Walk single pytree matches collection walker output when unwrapped."""
         a, _, _ = nested_pair_and_expected
 
@@ -216,7 +222,8 @@ class TestPatchPytreeContract:
     """Tests that patch_pytree honors the public patching and schema invariants."""
 
     def test_patch_pytree_mutates_tree(
-        self, patch_base_tree_dict: Dict[str, Any]
+        self,
+        patch_base_tree_dict: Dict[str, Any],
     ) -> None:
         """Patch pytree returns a new object and leaves the input value-equal to its original."""
         original = patch_base_tree_dict
@@ -229,7 +236,8 @@ class TestPatchPytreeContract:
         assert patched is original
 
     def test_patch_pytree_applies_multiple_leaf_patches_across_branches(
-        self, patch_base_tree_dict: Dict[str, Any]
+        self,
+        patch_base_tree_dict: Dict[str, Any],
     ) -> None:
         """Patch pytree applies multiple leaf patches in different parts of the tree."""
         patched = patch_pytree(
@@ -243,7 +251,8 @@ class TestPatchPytreeContract:
         assert patched == {"x": 2, "state": {"exp_avg": [10, 200], "step": 4}}
 
     def test_patch_pytree_raises_when_setting_key_does_not_exist(
-        self, patch_base_tree_dict: Dict[str, Any]
+        self,
+        patch_base_tree_dict: Dict[str, Any],
     ) -> None:
         """Patch pytree raises when a patch attempts to set a key that does not exist."""
         with pytest.raises(RuntimeError) as excinfo:
@@ -252,7 +261,8 @@ class TestPatchPytreeContract:
         assert "does_not_exist" in str(excinfo.value)
 
     def test_patch_pytree_raises_when_nested_key_does_not_exist(
-        self, patch_base_tree_dict: Dict[str, Any]
+        self,
+        patch_base_tree_dict: Dict[str, Any],
     ) -> None:
         """Patch pytree raises when a nested patch targets a non-existent key."""
         with pytest.raises(RuntimeError) as excinfo:
@@ -270,7 +280,8 @@ class TestPatchPytreeContract:
         assert "a" in str(excinfo.value)
 
     def test_patch_pytree_raises_when_patch_value_is_a_container(
-        self, patch_base_tree_dict: Dict[str, Any]
+        self,
+        patch_base_tree_dict: Dict[str, Any],
     ) -> None:
         """Patch pytree raises when asked to patch in a container value (schema immutability)."""
         with pytest.raises(RuntimeError) as excinfo:
@@ -279,7 +290,8 @@ class TestPatchPytreeContract:
         assert "schema" in str(excinfo.value).lower()
 
     def test_patch_pytree_raises_when_leaf_type_changes(
-        self, patch_base_tree_dict: Dict[str, Any]
+        self,
+        patch_base_tree_dict: Dict[str, Any],
     ) -> None:
         """Patch pytree raises when asked to replace a leaf with a different leaf type."""
         with pytest.raises(TypeError) as excinfo:
@@ -288,7 +300,8 @@ class TestPatchPytreeContract:
         assert "x" in str(excinfo.value)
 
     def test_patch_pytree_patches_list_indices_via_string_segments(
-        self, patch_base_tree_list: List[Any]
+        self,
+        patch_base_tree_list: List[Any],
     ) -> None:
         """Patch pytree patches list elements via numeric string path segments."""
         patched = patch_pytree(patch_base_tree_list, [("0", 111), ("1/k", 222)])
@@ -296,7 +309,8 @@ class TestPatchPytreeContract:
         assert isinstance(patched, list)
 
     def test_patch_pytree_patches_tuple_indices_via_string_segments(
-        self, patch_base_tree_tuple: Tuple[Any, ...]
+        self,
+        patch_base_tree_tuple: Tuple[Any, ...],
     ) -> None:
         """Patch pytree patches tuple elements via numeric string path segments and returns a tuple."""
         patched = patch_pytree(patch_base_tree_tuple, [("0", 111), ("1/k", 222)])
@@ -304,7 +318,8 @@ class TestPatchPytreeContract:
         assert isinstance(patched, tuple)
 
     def test_patch_pytree_raises_when_list_index_out_of_range(
-        self, patch_base_tree_list: List[Any]
+        self,
+        patch_base_tree_list: List[Any],
     ) -> None:
         """Patch pytree raises when asked to set a list index that does not exist."""
         with pytest.raises(RuntimeError) as excinfo:

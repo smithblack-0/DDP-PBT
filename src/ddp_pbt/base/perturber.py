@@ -5,9 +5,10 @@ Handles perturbation of hyperparameter values using normal sampling in either
 linear or log-space, with optional bounds clipping.
 """
 
-import random
 import math
-from typing import Dict, List, Any
+import random
+from typing import Any, Dict, List
+
 
 class Perturber:
     """
@@ -21,7 +22,10 @@ class Perturber:
         """Initialize Perturber with no schema (must call setup_schema)."""
         self._schema = None
 
-    def setup_schema(self, schema: Dict[str, Dict[str, Any]]) -> None:
+    def setup_schema(
+        self,
+        schema: Dict[str, Dict[str, Any]],
+    ) -> None:
         """
         Configure perturbation behavior from schema.
 
@@ -39,10 +43,11 @@ class Perturber:
         """
         self._schema = schema
 
-    def apply_perturbation(self,
-                           path: str,
-                           value: float
-                           )->float:
+    def apply_perturbation(
+        self,
+        path: str,
+        value: float,
+    ) -> float:
         """
         Applies a perturbation while respecting the necessary
         clip rules and configuration conditions
@@ -65,7 +70,7 @@ class Perturber:
         # Check config/inputs sane
         # More thorough logic should go in the actual
         # Schema builder in the relevant class.
-        if  param_type == "log":
+        if param_type == "log":
             if min_bound is None:
                 raise RuntimeError("Cannot perturb log type with no minimum")
             if min_bound <= 0:
@@ -92,7 +97,10 @@ class Perturber:
 
         return value
 
-    def perturb(self, values: Dict[str, List[float]]) -> Dict[str, List[float]]:
+    def perturb(
+        self,
+        values: Dict[str, List[float]],
+    ) -> Dict[str, List[float]]:
         """
         Perturb hyperparameter values with independent normal sampling.
 

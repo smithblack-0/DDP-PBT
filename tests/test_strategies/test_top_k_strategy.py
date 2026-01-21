@@ -5,32 +5,32 @@ TopKStrategy randomly selects from top-k performers and perturbs their hyperpara
 Tests validate top-k selection logic, hyperparameter perturbation, and model/optimizer reduction.
 """
 
+import json
 import os
 import sys
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pytest
 import torch
-import torch.multiprocessing as mp
 import torch.distributed as dist
-import numpy as np
+import torch.multiprocessing as mp
 
-from src.ddp_pbt.Strategies.top_k_strategy import (
-    TopKStrategy,
-    make_top_k_strategy_out_of_top_k,
-    make_top_k_strategy_by_selection_percentage
-)
-from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
-
+from src.ddp_pbt.base.state import State
+from src.ddp_pbt.Strategies.top_k_strategy import (
+    TopKStrategy,
+    make_top_k_strategy_by_selection_percentage,
+    make_top_k_strategy_out_of_top_k,
+)
 
 # Test Fixtures and Helpers
 
-def integration_worker_top_k(rank, world_size, output_dir, master_addr, master_port):
+
+def integration_worker_top_k(rank, world_size, output_dir, master_addr, master_port,):
     """Worker function for integration test."""
     # Setup environment
     os.environ["MASTER_ADDR"] = master_addr
@@ -49,7 +49,7 @@ def integration_worker_top_k(rank, world_size, output_dir, master_addr, master_p
         # Create strategy with k=2 (top 2 performers can be selected)
         strategy = make_top_k_strategy_out_of_top_k(
             top_k=2,
-            optimizer=optimizer
+            optimizer=optimizer,
         )
         strategy.bind_linear_hyperparameter("lr", std=0.001, min=0.001, max=0.1)
         strategy.bind_log_hyperparameter("weight_decay", std=0.1, min=1e-5, max=0.01)
@@ -58,18 +58,20 @@ def integration_worker_top_k(rank, world_size, output_dir, master_addr, master_p
         results = []
         for round_idx in range(3):
             # Simulate training - just record current hyperparams
-            current_lr = optimizer.param_groups[0]['lr']
-            current_wd = optimizer.param_groups[0]['weight_decay']
+            current_lr = optimizer.param_groups[0]["lr"]
+            current_wd = optimizer.param_groups[0]["weight_decay"]
 
             # Simulate validation loss (rank 0 best, rank 1 second best, rank 2 worst)
             val_loss = float(rank + 1) * 0.5
 
-            results.append({
-                "round": round_idx,
-                "lr": current_lr,
-                "weight_decay": current_wd,
-                "val_loss": val_loss
-            })
+            results.append(
+                {
+                    "round": round_idx,
+                    "lr": current_lr,
+                    "weight_decay": current_wd,
+                    "val_loss": val_loss,
+                }
+            )
 
             # Step strategy
             strategy.step(val_loss)
@@ -84,6 +86,7 @@ def integration_worker_top_k(rank, world_size, output_dir, master_addr, master_p
 
 
 # Unit Tests
+
 
 class TestTopKStrategyScoring:
     """Tests score method that selects from top-k workers."""
@@ -100,7 +103,9 @@ class TestTopKStrategyScoring:
         perturber = Mock(spec=Perturber)
 
         # num_k=5 but only 3 workers
-        strategy = TopKStrategy(num_k=5, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=5, state=state, communication=communication, perturber=perturber
+        )
         validation_metrics = [0.5, 0.1, 0.3]
 
         with pytest.raises(RuntimeError, match="Num k was greater than world size"):
@@ -118,7 +123,9 @@ class TestTopKStrategyScoring:
         perturber = Mock(spec=Perturber)
 
         # Create strategy with k=2
-        strategy = TopKStrategy(num_k=2, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=2, state=state, communication=communication, perturber=perturber
+        )
 
         # Validation metrics: [0.5, 0.1, 0.3]
         # Ascending order (best first): [1, 2, 0] (indices)
@@ -161,7 +168,9 @@ class TestTopKStrategyScoring:
         perturber = Mock(spec=Perturber)
 
         # k=1 means only the best performer can be selected
-        strategy = TopKStrategy(num_k=1, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=1, state=state, communication=communication, perturber=perturber
+        )
         validation_metrics = [0.5, 0.1, 0.3]
 
         world_weights = strategy.score(validation_metrics, communication)
@@ -183,7 +192,9 @@ class TestTopKStrategyScoring:
         perturber = Mock(spec=Perturber)
 
         # k=3 (all workers) means any worker can be selected
-        strategy = TopKStrategy(num_k=3, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=3, state=state, communication=communication, perturber=perturber
+        )
         validation_metrics = [0.5, 0.1, 0.3]
 
         # Run multiple times to verify all indices are possible
@@ -215,18 +226,22 @@ class TestTopKStrategyReduceHyperparameters:
         perturber = Mock(spec=Perturber)
         perturber.perturb.return_value = {"lr": [0.0015]}
 
-        strategy = TopKStrategy(num_k=2, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=2, state=state, communication=communication, perturber=perturber
+        )
 
         # Winner is worker 1
         world_weights = [0.0, 1.0, 0.0]
         world_hyperparameters = [
             {"lr": [0.001]},
             {"lr": [0.002]},  # Winner
-            {"lr": [0.003]}
+            {"lr": [0.003]},
         ]
 
         result = strategy.reduce_hyperparameters(
-            world_weights, world_hyperparameters, communication
+            world_weights,
+            world_hyperparameters,
+            communication,
         )
 
         # Should have perturbed winner's values
@@ -250,7 +265,9 @@ class TestTopKStrategyReduceModels:
         communication.reduce_by_world_weights.return_value = expected_result
 
         perturber = Mock(spec=Perturber)
-        strategy = TopKStrategy(num_k=2, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=2, state=state, communication=communication, perturber=perturber
+        )
 
         world_weights = [0.0, 1.0, 0.0]
         model_pytree = {"param1": torch.tensor([1.0, 2.0])}
@@ -258,7 +275,8 @@ class TestTopKStrategyReduceModels:
         result = strategy.reduce_models(world_weights, model_pytree, communication)
 
         communication.reduce_by_world_weights.assert_called_once_with(
-            world_weights, model_pytree
+            world_weights,
+            model_pytree,
         )
         assert result == expected_result
 
@@ -279,7 +297,9 @@ class TestTopKStrategyReduceOptimizer:
         communication.reduce_by_world_weights.return_value = expected_result
 
         perturber = Mock(spec=Perturber)
-        strategy = TopKStrategy(num_k=2, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=2, state=state, communication=communication, perturber=perturber
+        )
 
         world_weights = [0.0, 1.0, 0.0]
         optimizer_pytree = {"state1": torch.tensor([1.0, 2.0])}
@@ -287,7 +307,8 @@ class TestTopKStrategyReduceOptimizer:
         result = strategy.reduce_optimizer(world_weights, optimizer_pytree, communication)
 
         communication.reduce_by_world_weights.assert_called_once_with(
-            world_weights, optimizer_pytree
+            world_weights,
+            optimizer_pytree,
         )
         assert result == expected_result
 
@@ -311,17 +332,19 @@ class TestTopKStrategyStep:
         communication.gather_pytree_list.side_effect = [
             [{"lr": [0.001]}, {"lr": [0.002]}],  # world_hyperparameters
             [0.5, 0.3],  # validation_metrics
-            [1]  # choices from score() - rank 0's choice wins
+            [1],  # choices from score() - rank 0's choice wins
         ]
         communication.reduce_by_world_weights.side_effect = [
             {"param1": torch.tensor([1.5])},  # reduced model
-            {"state1": torch.tensor([2.5])}   # reduced optimizer
+            {"state1": torch.tensor([2.5])},  # reduced optimizer
         ]
 
         perturber = Mock(spec=Perturber)
         perturber.perturb.return_value = {"lr": [0.0015]}
 
-        strategy = TopKStrategy(num_k=2, state=state, communication=communication, perturber=perturber)
+        strategy = TopKStrategy(
+            num_k=2, state=state, communication=communication, perturber=perturber
+        )
 
         # Call step
         strategy.step(0.5)
@@ -331,7 +354,9 @@ class TestTopKStrategyStep:
         state.get_model_tensors.assert_called_once()
         state.get_optimizer_tensors.assert_called_once()
 
-        assert communication.gather_pytree_list.call_count == 3  # hyperparams, metrics, choice coordination
+        assert (
+            communication.gather_pytree_list.call_count == 3
+        )  # hyperparams, metrics, choice coordination
         perturber.perturb.assert_called_once()
 
         state.set_hyperparam_values.assert_called_once_with({"lr": [0.0015]})
@@ -352,7 +377,7 @@ class TestMakeTopKStrategyFactory:
         strategy = make_top_k_strategy_out_of_top_k(
             top_k=2,
             optimizer=optimizer,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
 
         # Should be TopKStrategy instance
@@ -368,7 +393,7 @@ class TestMakeTopKStrategyFactory:
         optimizer = torch.optim.Adam(params, lr=0.001)
 
         config = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True},
         }
 
         # Mock Communication class since distributed world not initialized
@@ -377,7 +402,7 @@ class TestMakeTopKStrategyFactory:
             top_k=2,
             optimizer=optimizer,
             config=config,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
 
         # Schema should be loaded
@@ -398,7 +423,7 @@ class TestMakeTopKStrategyFactory:
             selection_percentage=0.3,
             optimizer=optimizer,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
 
         # Should be TopKStrategy instance
@@ -419,7 +444,7 @@ class TestMakeTopKStrategyFactory:
             selection_percentage=0.0,
             optimizer=optimizer,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
         assert isinstance(strategy_0, TopKStrategy)
 
@@ -428,12 +453,13 @@ class TestMakeTopKStrategyFactory:
             selection_percentage=1.0,
             optimizer=optimizer,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
         assert isinstance(strategy_1, TopKStrategy)
 
 
 # Integration Tests
+
 
 @pytest.mark.distributed
 @pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")
@@ -476,4 +502,6 @@ class TestTopKStrategyIntegration:
             for rank_results in results:
                 for round_result in rank_results:
                     assert 0.001 <= round_result["lr"] <= 0.1, "LR should stay within bounds"
-                    assert 1e-5 <= round_result["weight_decay"] <= 0.01, "Weight decay should stay within bounds"
+                    assert (
+                        1e-5 <= round_result["weight_decay"] <= 0.01
+                    ), "Weight decay should stay within bounds"

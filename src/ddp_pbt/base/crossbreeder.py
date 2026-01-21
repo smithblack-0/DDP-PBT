@@ -4,10 +4,11 @@ Crossbreeder: Parent selection and hyperparameter blending with probabilistic mu
 Handles selecting top parents and blending their hyperparameters with optional mutation.
 """
 
-import random
 import math
-from typing import Dict, List, Any, Optional
+import random
+from typing import Any, Dict, List, Optional
 
+from .perturber import Perturber
 
 
 class Crossbreeder:
@@ -19,7 +20,11 @@ class Crossbreeder:
     hyperparameters are a 50/50
     """
 
-    def __init__(self, parent_pool_depth: int, mutation_rate: float):
+    def __init__(
+        self,
+        parent_pool_depth: int,
+        mutation_rate: float,
+    ):
         """
         Initialize Crossbreeder with configuration.
 
@@ -32,7 +37,10 @@ class Crossbreeder:
         self._schema = None
         self._perturber = None
 
-    def setup_schema(self, schema: Dict[str, Dict[str, Any]]) -> None:
+    def setup_schema(
+        self,
+        schema: Dict[str, Dict[str, Any]],
+    ) -> None:
         """
         Configure blending behavior from schema.
 
@@ -49,24 +57,31 @@ class Crossbreeder:
                    }
         """
         self._schema = schema
+        # If perturber already set, propagate schema to it
+        if self._perturber is not None:
+            self._perturber.setup_schema(self._schema)
 
-    def setup_perturber(self, perturber) -> None:
+    def setup_perturber(
+        self,
+        perturber: Perturber,
+    ) -> None:
         """
         Inject Perturber dependency for probabilistic mutation.
 
         Args:
             perturber: Perturber instance for mutating crossbred hyperparameters.
         """
-        if self._schema is None:
-            raise RuntimeError("Should initialize schema first")
         self._perturber = perturber
-        self._perturber.setup_schema(self._schema)
+        # If schema already set, propagate to perturber immediately
+        if self._schema is not None:
+            self._perturber.setup_schema(self._schema)
 
-    def crossbreed_alleles(self,
-                          name: str,
-                          a_list: List[float],
-                          b_list: List[float]
-                          )->List[float]:
+    def crossbreed_alleles(
+        self,
+        name: str,
+        a_list: List[float],
+        b_list: List[float],
+    ) -> List[float]:
         """
         Crossbreed a group of alleles of a common type.
         Different parameter groups may or may not be
@@ -86,10 +101,11 @@ class Crossbreeder:
             output.append(random.choice([a, b]))
         return output
 
-    def mutate_alleles(self,
-                       name: str,
-                       allele_group: List[float],
-                       )->List[float]:
+    def mutate_alleles(
+        self,
+        name: str,
+        allele_group: List[float],
+    ) -> List[float]:
         """
         Mutates a list of alleles. Each mutation has
         a mutation_chance% percentage of happing. The
@@ -110,7 +126,7 @@ class Crossbreeder:
     def crossbreed_hyperparameters(
         self,
         world_hyperparameters: List[Dict[str, List[float]]],
-        parent_weights: List[float]
+        parent_weights: List[float],
     ) -> Dict[str, List[float]]:
         """
         Blend hyperparameters from parents with probabilistic mutation.
@@ -157,7 +173,9 @@ class Crossbreeder:
             father_allele_group = father[allele_key]
 
             if allele_key in self._schema:
-                child_allele_group = self.crossbreed_alleles(allele_key, mother_allele_group, father_allele_group)
+                child_allele_group = self.crossbreed_alleles(
+                    allele_key, mother_allele_group, father_allele_group
+                )
                 child_allele_group = self.mutate_alleles(allele_key, child_allele_group)
             else:
                 raise RuntimeError(f"Attempt to crossbreed unconfigured schema: {allele_key}")

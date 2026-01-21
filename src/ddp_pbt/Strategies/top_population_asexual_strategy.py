@@ -9,19 +9,18 @@ downsides here. The gradients must remain mutually intelligent
 between the workers or the worker is quickly pruned.
 """
 
-
-from typing import List, Dict, Optional, Any, Type
-
-import torch
 import math
 import random
+from typing import Any, Dict, List, Optional, Type
+
 import numpy as np
+import torch
 from torch.optim import Optimizer
 
 from ..base.abstract_strategy import AbstractStrategy
-from ..base.state import State
 from ..base.communication import Communication
 from ..base.perturber import Perturber
+from ..base.state import State
 
 
 class TopPopulationAsexualStrategy(AbstractStrategy):
@@ -43,13 +42,14 @@ class TopPopulationAsexualStrategy(AbstractStrategy):
     instead in the native schema language.
     """
 
-    def __init__(self,
-                 num_k: int,
-                 state: State,
-                 communication: Communication,
-                 perturber: Perturber,
-                 config: Optional[Dict[str, Any]] = None,
-                 ):
+    def __init__(
+        self,
+        num_k: int,
+        state: State,
+        communication: Communication,
+        perturber: Perturber,
+        config: Optional[Dict[str, Any]] = None,
+    ):
         """
         :param num_k: Number of k. Cannot be larger than world size.
         :param state: The state object used for optimizer access
@@ -62,10 +62,11 @@ class TopPopulationAsexualStrategy(AbstractStrategy):
         self._perturber.setup_schema(self.schema)
         self._num_k = num_k
 
-    def score(self,
-              validation_metrics: List[float],
-              communication: Communication,
-              ) -> List[float]:
+    def score(
+        self,
+        validation_metrics: List[float],
+        communication: Communication,
+    ) -> List[float]:
         """
         Perform an independent sorting and top-k
         selection per device. Different wworkers
@@ -84,20 +85,20 @@ class TopPopulationAsexualStrategy(AbstractStrategy):
 
         validation_metrics = np.array(validation_metrics)
         ascending_order = np.argsort(validation_metrics)
-        top_k = ascending_order[:self._num_k]
+        top_k = ascending_order[: self._num_k]
         choice = int(np.random.choice(top_k))
 
         # Create and return the worker's choice. All workers make
         # independent choices
-        world_weights = [0.0]*len(validation_metrics)
+        world_weights = [0.0] * len(validation_metrics)
         world_weights[choice] = 1.0
         return world_weights
 
     def reduce_hyperparameters(
-            self,
-            world_weights: List[float],
-            world_hyperparameters: List[Dict[str, List[float]]],
-            communication: Communication
+        self,
+        world_weights: List[float],
+        world_hyperparameters: List[Dict[str, List[float]]],
+        communication: Communication,
     ) -> Dict[str, List[float]]:
         """
         Select winner's hyperparameters and perturb.
@@ -109,10 +110,10 @@ class TopPopulationAsexualStrategy(AbstractStrategy):
         return self._perturber.perturb(winner_hyperparams)
 
     def reduce_models(
-            self,
-            world_weights: List[float],
-            model_pytree: Dict[str, torch.Tensor],
-            communication: Communication
+        self,
+        world_weights: List[float],
+        model_pytree: Dict[str, torch.Tensor],
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduces the models by their weights using
@@ -121,23 +122,24 @@ class TopPopulationAsexualStrategy(AbstractStrategy):
         return communication.reduce_by_world_weights(world_weights, model_pytree)
 
     def reduce_optimizer(
-            self,
-            world_weights: List[float],
-            optimizer_pytree: Dict[str, torch.Tensor],
-            communication: Communication
+        self,
+        world_weights: List[float],
+        optimizer_pytree: Dict[str, torch.Tensor],
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
-        """"
+        """ "
         Reduces the optimizers by their world weights
         """
         return communication.reduce_by_world_weights(world_weights, optimizer_pytree)
 
+
 def make_top_population_asexual_strategy(
-        reproduction_percentage: float,
-        optimizer: Optimizer,
-        max_hyperparameter_search_depth: int,
-        communication_class: Type[Communication] = Communication,
-        config: Optional[Dict[str, Any]] = None
-        )->TopPopulationAsexualStrategy:
+    reproduction_percentage: float,
+    optimizer: Optimizer,
+    max_hyperparameter_search_depth: int,
+    communication_class: Type[Communication] = Communication,
+    config: Optional[Dict[str, Any]] = None,
+) -> TopPopulationAsexualStrategy:
     """
     Creates a valid and functioning population asexual
     reproduction strategy that keeps separate genomes on
@@ -179,7 +181,7 @@ def make_top_population_asexual_strategy(
     assert reproduction_percentage >= 0.0 and reproduction_percentage <= 1.0
     communicator = communication_class()
     world_size = communicator.world_size
-    top_k = int(world_size*reproduction_percentage)
+    top_k = int(world_size * reproduction_percentage)
 
     # Build and return
     perturber = Perturber()

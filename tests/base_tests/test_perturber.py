@@ -6,11 +6,14 @@ Tests validate perturbation behavior for log/linear parameters and bounds clippi
 """
 
 import random
+
 import pytest
 
 from src.ddp_pbt.base.perturber import Perturber
+
 # Deleted illegal alias claude. Go rename everything to perturber instead.
 # Stop being lazy. Using random aliases like that is a code smell. No as. No alias. Nope.
+
 
 class TestPerturberSetupSchema:
     """Tests that setup_schema correctly configures perturbation behavior."""
@@ -19,7 +22,7 @@ class TestPerturberSetupSchema:
         """Perturber should store the schema for use in perturbation."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True},
         }
         perturber.setup_schema(schema)
         # Verify schema is stored by attempting perturbation
@@ -36,7 +39,7 @@ class TestPerturberLinearPerturbation:
         """Linear parameters should have normal(0, std) added directly."""
         perturber = Perturber()
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.001, "shared": False}
+            "weight_decay": {"type": "linear", "std": 0.001, "shared": False},
         }
         perturber.setup_schema(schema)
 
@@ -54,7 +57,7 @@ class TestPerturberLinearPerturbation:
         """Linear parameters should clip to min bound after perturbation."""
         perturber = Perturber()
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.1, "min": 0.0, "shared": True}
+            "weight_decay": {"type": "linear", "std": 0.1, "min": 0.0, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -69,7 +72,7 @@ class TestPerturberLinearPerturbation:
         """Linear parameters should clip to max bound after perturbation."""
         perturber = Perturber()
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.1, "min": 0.0, "max": 0.1, "shared": True}
+            "weight_decay": {"type": "linear", "std": 0.1, "min": 0.0, "max": 0.1, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -84,7 +87,7 @@ class TestPerturberLinearPerturbation:
         """Linear parameters without bounds should perturb freely."""
         perturber = Perturber()
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.001, "shared": True}
+            "weight_decay": {"type": "linear", "std": 0.001, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -101,7 +104,7 @@ class TestPerturberLogPerturbation:
         """Log parameters should convert to log-space, add noise, convert back."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -118,7 +121,7 @@ class TestPerturberLogPerturbation:
         """Log parameters should clip to min bound after converting back from log-space."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 1.0, "min": 1e-4, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 1.0, "min": 1e-4, "max": 1e-1, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -133,7 +136,7 @@ class TestPerturberLogPerturbation:
         """Log parameters should clip to max bound after converting back from log-space."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 1.0, "min": 1e-4, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 1.0, "min": 1e-4, "max": 1e-1, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -148,7 +151,7 @@ class TestPerturberLogPerturbation:
         """Log parameters without max bound should perturb freely in log-space."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -165,7 +168,7 @@ class TestPerturberPerElementIndependence:
         """Each element in a per-group hyperparameter list should get independent random draws."""
         perturber = Perturber()
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.01, "shared": False}
+            "weight_decay": {"type": "linear", "std": 0.01, "shared": False},
         }
         perturber.setup_schema(schema)
 
@@ -178,13 +181,15 @@ class TestPerturberPerElementIndependence:
         assert len(result["weight_decay"]) == 3
         # They should be different from each other (independent random draws)
         perturbed_values = result["weight_decay"]
-        assert perturbed_values[0] != perturbed_values[1] or perturbed_values[1] != perturbed_values[2]
+        assert (
+            perturbed_values[0] != perturbed_values[1] or perturbed_values[1] != perturbed_values[2]
+        )
 
     def test_log_per_group_values_perturbed_independently(self):
         """Each element in a per-group log hyperparameter list should get independent random draws."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": False}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": False},
         }
         perturber.setup_schema(schema)
 
@@ -206,14 +211,14 @@ class TestPerturberMultipleHyperparameters:
         perturber = Perturber()
         schema = {
             "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True},
-            "weight_decay": {"type": "linear", "std": 0.001, "min": 0, "max": 0.1, "shared": False}
+            "weight_decay": {"type": "linear", "std": 0.001, "min": 0, "max": 0.1, "shared": False},
         }
         perturber.setup_schema(schema)
 
         random.seed(42)
         values = {
             "lr": [0.001],
-            "weight_decay": [0.01, 0.005]
+            "weight_decay": [0.01, 0.005],
         }
         result = perturber.perturb(values)
 
@@ -238,7 +243,7 @@ class TestPerturberMultipleHyperparameters:
         """Perturber should only perturb parameters in the schema."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -267,7 +272,7 @@ class TestPerturberEdgeCases:
         """Shared hyperparameters (length-1 list) should work correctly."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True},
         }
         perturber.setup_schema(schema)
 
@@ -281,7 +286,7 @@ class TestPerturberEdgeCases:
         """Perturbation with std=0 should return original value (possibly clipped)."""
         perturber = Perturber()
         schema = {
-            "lr": {"type": "linear", "std": 0.0, "shared": True}
+            "lr": {"type": "linear", "std": 0.0, "shared": True},
         }
         perturber.setup_schema(schema)
 

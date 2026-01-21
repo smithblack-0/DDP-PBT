@@ -5,11 +5,12 @@ Communication handles distributed gathering and reduction with real GLOO backend
 Tests validate gather_pytree_list and reduce_by_world_weights operations.
 """
 
+import json
 import os
 import sys
-import json
 import tempfile
 from pathlib import Path
+
 import pytest
 import torch
 import torch.distributed as dist
@@ -36,7 +37,7 @@ def gather_worker(rank, world_size, output_dir, master_addr, master_port):
         # Each worker has unique dictionary tree
         local_dict_tree = {
             "param1": torch.tensor([rank * 1.0]),
-            "param2": torch.tensor([rank * 2.0, rank * 3.0])
+            "param2": torch.tensor([rank * 2.0, rank * 3.0]),
         }
 
         # Gather from all workers
@@ -47,8 +48,7 @@ def gather_worker(rank, world_size, output_dir, master_addr, master_port):
         with open(output_file, "w") as f:
             # Convert tensors to lists for JSON serialization
             result_serializable = [
-                {k: v.tolist() for k, v in pytree.items()}
-                for pytree in gathered_list
+                {k: v.tolist() for k, v in pytree.items()} for pytree in gathered_list
             ]
             json.dump({"gathered": result_serializable}, f)
 
@@ -74,7 +74,7 @@ def reduce_worker(rank, world_size, output_dir, master_addr, master_port):
         # Each worker has unique dictionary tree
         local_dict_tree = {
             "param1": torch.tensor([rank * 10.0]),
-            "param2": torch.tensor([rank * 20.0, rank * 30.0])
+            "param2": torch.tensor([rank * 20.0, rank * 30.0]),
         }
 
         # World weights (rank 0 has 0.3, rank 1 has 0.7, others have 0.0)
@@ -114,7 +114,7 @@ def reduce_uniform_worker(rank, world_size, output_dir, master_addr, master_port
         # Each worker has unique dictionary tree
         local_dict_tree = {
             "param1": torch.tensor([float(rank + 1)]),
-            "param2": torch.tensor([float(rank * 2), float(rank * 3)])
+            "param2": torch.tensor([float(rank * 2), float(rank * 3)]),
         }
 
         # Uniform weights
@@ -149,7 +149,7 @@ def filter_worker(rank, world_size, output_dir, master_addr, master_port):
         comm = Communication()
 
         local_dict_tree = {
-            "param1": torch.tensor([float(rank * 100)])
+            "param1": torch.tensor([float(rank * 100)]),
         }
 
         # Only ranks 1 and 3 have non-zero weights
@@ -215,7 +215,7 @@ class TestCommunicationGatherPytreeList:
             # Spawn worker processes
             mp.spawn(
                 gather_worker,
-                args=(world_size, tmpdir, "localhost", "29501"),
+                args=(world_size, tmpdir, "localhost", "29502"),
                 nprocs=world_size,
                 join=True,
             )
@@ -363,10 +363,13 @@ def single_worker_validation(rank, world_size, output_dir, master_addr, master_p
         # Save results
         output_file = Path(output_dir) / f"rank_{rank}.json"
         with open(output_file, "w") as f:
-            json.dump({
-                "error_raised": error_raised,
-                "error_message": error_message
-            }, f)
+            json.dump(
+                {
+                    "error_raised": error_raised,
+                    "error_message": error_message,
+                },
+                f,
+            )
 
     finally:
         dist.destroy_process_group()
@@ -394,10 +397,13 @@ def properties_worker(rank, world_size, output_dir, master_addr, master_port):
         # Save results
         output_file = Path(output_dir) / f"rank_{rank}.json"
         with open(output_file, "w") as f:
-            json.dump({
-                "rank": reported_rank,
-                "world_size": reported_world_size
-            }, f)
+            json.dump(
+                {
+                    "rank": reported_rank,
+                    "world_size": reported_world_size,
+                },
+                f,
+            )
 
     finally:
         dist.destroy_process_group()
@@ -472,4 +478,6 @@ class TestCommunicationValidation:
             with open(output_file, "r") as f:
                 data = json.load(f)
                 assert data["error_raised"], "Communication should raise error for single worker"
-                assert "one worker" in data["error_message"].lower(), "Error message should mention single worker"
+                assert (
+                    "one worker" in data["error_message"].lower()
+                ), "Error message should mention single worker"

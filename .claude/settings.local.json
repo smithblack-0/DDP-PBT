@@ -3,7 +3,16 @@
     "allow": [
       "WebSearch",
       "WebFetch(domain:docs.ray.io)",
-      "Bash(wsl:*)"
+      "Bash(wsl:*)",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" add implementation_plan.md)",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" commit -m \"Add import style guide to implementation_plan.md\n\n- Test suite uses absolute imports with src. prefix\n- Modules use relative imports\n- Package __init__.py orders primitives first\n- Documents circular import resolution strategy\")",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" add tests/test_perturber.py)",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" commit -m \"Fix perturber tests: add required min field for log-type schemas\n\n- test_log_without_bounds: added min=1e-5\n- test_log_per_group_values_perturbed_independently: added min=1e-5\n- test_partial_schema_only_perturbs_configured_parameters: added min=1e-5\n- test_single_value_list: added min=1e-5\n\nLog parameters require min > 0 per schema validation.\")",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" commit -m \"Fix floating point precision in test_log_clips_to_maximum_bound\n\nAdd 1e-9 tolerance to account for floating point arithmetic in log-space clipping\")",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" add tests/test_crossbreeder.py)",
+      "Bash(git -C \"C:\\\\Users\\\\chris\\\\PycharmProjects\\\\DDP-PBT\" commit -m \"Fix test_setup_schema_stores_reference\n\n- Set mutation_rate=0.0 to avoid needing permuter for schema test\n- Add required min field to log-type schema\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

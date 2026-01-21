@@ -5,22 +5,23 @@ AbstractStrategy orchestrates the round-end flow and provides configuration meth
 Tests validate schema building, orchestration, serialization, and abstract method contracts.
 """
 
+import os
+from unittest.mock import MagicMock, Mock
+
 import pytest
 import torch
 import torch.distributed as dist
-import os
-from unittest.mock import Mock, MagicMock
 
 from src.ddp_pbt.base.abstract_strategy import AbstractStrategy
-from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
+from src.ddp_pbt.base.state import State
 
 
 @pytest.fixture(scope="function")
 def distributed_context():
     """Setup minimal distributed context for testing Communication."""
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29500"
+    os.environ["MASTER_PORT"] = "29501"  # Use different port to avoid conflicts
     os.environ["RANK"] = "0"
     os.environ["WORLD_SIZE"] = "1"
 
@@ -103,7 +104,9 @@ class TestAbstractStrategyConfiguration:
         strategy = ConcreteTestStrategy(state, communication)
 
         # Bind linear hyperparameter
-        strategy.bind_linear_hyperparameter("weight_decay", std=0.001, min=0.0, max=0.1, shared=False)
+        strategy.bind_linear_hyperparameter(
+            "weight_decay", std=0.001, min=0.0, max=0.1, shared=False
+        )
 
         # Verify schema was built
         schema = strategy.state_dict()
@@ -155,7 +158,13 @@ class TestAbstractStrategyConfiguration:
 
         config = {
             "lr": {"type": "log", "std": 0.1, "min": 1e-4, "max": 1e-1, "shared": True},
-            "weight_decay": {"type": "linear", "std": 0.001, "min": 0.0, "max": 0.1, "shared": False},
+            "weight_decay": {
+                "type": "linear",
+                "std": 0.001,
+                "min": 0.0,
+                "max": 0.1,
+                "shared": False,
+            },
         }
 
         strategy = ConcreteTestStrategy(state, communication, config)
@@ -255,10 +264,12 @@ class TestAbstractStrategyOrchestration:
         communication = Mock(spec=Communication)
         communication.gather_pytree_list.return_value = [
             {"lr": [0.001]},
-            {"lr": [0.002]}
+            {"lr": [0.002]},
         ]
 
-        strategy = ConcreteTestStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}})
+        strategy = ConcreteTestStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
 
         # Call step
         strategy.step(0.95)
@@ -284,10 +295,12 @@ class TestAbstractStrategyOrchestration:
         communication = Mock(spec=Communication)
         communication.gather_pytree_list.return_value = [
             {"lr": [0.001]},
-            {"lr": [0.002]}
+            {"lr": [0.002]},
         ]
 
-        strategy = ConcreteTestStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}})
+        strategy = ConcreteTestStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
 
         # Call step
         strategy.step(0.95)
@@ -312,11 +325,12 @@ class TestAbstractStrategyOrchestration:
         communication = Mock(spec=Communication)
         communication.gather_pytree_list.return_value = [
             {"lr": [0.001]},
-            {"lr": [0.002]}
+            {"lr": [0.002]},
         ]
 
         class TrackingStrategy(ConcreteTestStrategy):
             """Strategy that tracks communication parameter."""
+
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
                 self.comm_passed = []
@@ -327,7 +341,9 @@ class TestAbstractStrategyOrchestration:
 
             def reduce_hyperparameters(self, world_weights, world_hyperparameters, communication):
                 self.comm_passed.append(communication)
-                return super().reduce_hyperparameters(world_weights, world_hyperparameters, communication)
+                return super().reduce_hyperparameters(
+                    world_weights, world_hyperparameters, communication
+                )
 
             def reduce_models(self, world_weights, model_pytree, communication):
                 self.comm_passed.append(communication)
@@ -337,7 +353,9 @@ class TestAbstractStrategyOrchestration:
                 self.comm_passed.append(communication)
                 return super().reduce_optimizer(world_weights, optimizer_pytree, communication)
 
-        strategy = TrackingStrategy(state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}})
+        strategy = TrackingStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
 
         # Call step
         strategy.step(0.95)
