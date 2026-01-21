@@ -58,19 +58,19 @@ class Crossbreeder:
         """
         self._permuter = permuter
 
-    def select_parents(self, world_weights: List[float]) -> List[float]:
+    def select_parents(self, validation_loss: List[float]) -> List[float]:
         """
         Select 2 parents from top parent_pool_depth workers.
 
         Args:
-            world_weights: World weights (length = world_size, sum = 1.0).
+            validation_loss: Validation loss list. Lower is better.
 
         Returns:
             Filtered world weights with exactly 2 non-zero entries (sum = 1.0).
             Non-zero entries are for the 2 randomly selected parents from top-K.
         """
         # Rank workers by weight (descending)
-        indexed_weights = [(i, w) for i, w in enumerate(world_weights)]
+        indexed_weights = [(i, w) for i, w in enumerate(validation_loss)]
         indexed_weights.sort(key=lambda x: x[1], reverse=True)
         sorted_indexes = [i for i, _ in indexed_weights]
 
