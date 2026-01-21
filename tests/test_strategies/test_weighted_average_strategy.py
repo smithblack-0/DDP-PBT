@@ -29,7 +29,13 @@ from src.ddp_pbt.Strategies.weighted_average_strategy import (
 # Test Fixtures and Helpers
 
 
-def integration_worker_weighted_average(rank, world_size, output_dir, master_addr, master_port,):
+def integration_worker_weighted_average(
+    rank,
+    world_size,
+    output_dir,
+    master_addr,
+    master_port,
+):
     """Worker function for integration test."""
     # Setup environment
     os.environ["MASTER_ADDR"] = master_addr

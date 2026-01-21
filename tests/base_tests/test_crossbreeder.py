@@ -170,7 +170,7 @@ class TestCrossbreederProbabilisticMutation:
 
         # Run multiple times
         for _ in range(10):
-            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
         # Perturber should never be called
         assert perturber.apply_perturbation.call_count == 0
@@ -192,7 +192,7 @@ class TestCrossbreederProbabilisticMutation:
 
         # Run multiple times - each run mutates 1 allele
         for _ in range(10):
-            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
         # With mutation_rate=1.0 and 1 allele, apply_perturbation called 10 times (once per run)
         assert perturber.apply_perturbation.call_count == 10
@@ -235,7 +235,7 @@ class TestCrossbreederProbabilisticMutation:
         random.seed(42)
         # Run multiple times to check probability (1 allele per run)
         for _ in range(50):
-            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
         # With mutation_rate=0.5 and 1 allele, should mutate roughly half the time
         call_count = perturber.apply_perturbation.call_count

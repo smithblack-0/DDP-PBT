@@ -355,7 +355,7 @@ def single_worker_validation(rank, world_size, output_dir, master_addr, master_p
         error_raised = False
         error_message = ""
         try:
-            comm = Communication()
+            Communication()
         except EnvironmentError as e:
             error_raised = True
             error_message = str(e)

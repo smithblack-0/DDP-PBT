@@ -29,7 +29,13 @@ from src.ddp_pbt.Strategies.top_population_asexual_strategy import (
 # Test Fixtures and Helpers
 
 
-def integration_worker_population_asexual(rank, world_size, output_dir, master_addr, master_port,):
+def integration_worker_population_asexual(
+    rank,
+    world_size,
+    output_dir,
+    master_addr,
+    master_port,
+):
     """Worker function for integration test."""
     # Setup environment
     os.environ["MASTER_ADDR"] = master_addr

@@ -53,7 +53,7 @@ def _recursive_walk_pytrees(
 
     # Handle basic checking; same type?
     root_node = pytrees[0]
-    if not all(type(node) == type(root_node) for node in pytrees):
+    if not all(type(node) is type(root_node) for node in pytrees):
         raise TypeError(f"At path {path} not all nodes were the same type. This is illegal")
 
     # Dictionary case.
@@ -154,7 +154,7 @@ def patch_pytree(
     for key in processing_pytree.keys():
         if key in set_collection:
             patch_value = set_collection.pop(key)
-            if type(patch_value) != type(processing_pytree[key]):
+            if type(patch_value) is not type(processing_pytree[key]):
                 raise TypeError(f"Attempt to overwrite with different type detected at key {key}")
             output[key] = patch_value
         elif key in patch_collections:

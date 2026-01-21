@@ -98,9 +98,11 @@ class TopPopulationSexualStrategy(AbstractStrategy):
                 f"Cannot crossbreed with less than 2 workers, got {len(validation_metrics)}",
             )
         if self._num_k > len(validation_metrics):
-            raise ValueError(
-                f"parent_pool_depth ({self._num_k}) cannot exceed world_size ({len(validation_metrics)})",
+            msg = (
+                f"parent_pool_depth ({self._num_k}) cannot exceed "
+                f"world_size ({len(validation_metrics)})"
             )
+            raise ValueError(msg)
 
         top_pool = sorted_indexes[: self._num_k]
 
@@ -195,8 +197,8 @@ def make_top_population_sexual_strategy(
     :param reproduction_percentage: A number between 0 to 1.0 indicating the top performing
         percentage to allow reproduction on.
     :param optimizer: The optimizer to use for setup.
-    :param mutation_rate: A number from 0 to 1.0 indicating how frequently to mutate. Default is 0.05
-        or 5%
+    :param mutation_rate: A number from 0 to 1.0 indicating how frequently to mutate.
+        Default is 0.05 or 5%
     :param max_hyperparameter_search_depth: How many layers deep to search each param group for
          hyperparameters that can be bound to. Default of 3
     :param config: A valid config if provided

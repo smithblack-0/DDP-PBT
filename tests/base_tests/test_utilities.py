@@ -114,7 +114,7 @@ class TestWalkPytreeCollectionContract:
     def test_walk_pytree_collection_raises_when_dict_key_is_missing_at_a_nested_path(self) -> None:
         """Walk pytree collection raises when a required dict key is missing at a nested path."""
         root = {"state": {"x": 1, "y": 2}}
-        peer = {"state": {"x": 10, "y": 20}}  # start valid
+        peer = {"state": {"x": 10, "y": 20}}  # noqa: F841
         peer_missing = {"state": {"x": 10}}  # remove "y"
 
         with pytest.raises(RuntimeError) as excinfo:
@@ -143,7 +143,8 @@ class TestWalkPytreeCollectionContract:
         assert "beta" in str(excinfo.value)
 
     def test_walk_pytree_collection_raises_when_leaf_vs_container_mismatch_occurs(self) -> None:
-        """Walk pytree collection raises when one pytree has a leaf where another has a container."""
+        """Walk pytree collection raises when one pytree has a leaf where
+        another has a container."""
         root = {"x": {"y": 1}}
         peer = {"x": 7}
 
@@ -312,7 +313,8 @@ class TestPatchPytreeContract:
         self,
         patch_base_tree_tuple: Tuple[Any, ...],
     ) -> None:
-        """Patch pytree patches tuple elements via numeric string path segments and returns a tuple."""
+        """Patch pytree patches tuple elements via numeric string path segments
+        and returns a tuple."""
         patched = patch_pytree(patch_base_tree_tuple, [("0", 111), ("1/k", 222)])
         assert patched == (111, {"k": 222}, 3)
         assert isinstance(patched, tuple)

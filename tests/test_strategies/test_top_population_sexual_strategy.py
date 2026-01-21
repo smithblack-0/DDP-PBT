@@ -30,7 +30,13 @@ from src.ddp_pbt.Strategies.top_population_sexual_strategy import (
 # Test Fixtures and Helpers
 
 
-def integration_worker_population_sexual(rank, world_size, output_dir, master_addr, master_port,):
+def integration_worker_population_sexual(
+    rank,
+    world_size,
+    output_dir,
+    master_addr,
+    master_port,
+):
     """Worker function for integration test."""
     # Setup environment
     os.environ["MASTER_ADDR"] = master_addr
@@ -46,7 +52,8 @@ def integration_worker_population_sexual(rank, world_size, output_dir, master_ad
         model = torch.nn.Linear(10, 1)
         optimizer = torch.optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.001)
 
-        # Create strategy with 67% reproduction (ensures top_k=2 with world_size=3), 10% mutation rate
+        # Create strategy with 67% reproduction (ensures top_k=2 with world_size=3),
+        # 10% mutation rate
         strategy = make_top_population_sexual_strategy(
             reproduction_percentage=0.67,
             optimizer=optimizer,

@@ -186,7 +186,8 @@ class TestPerturberPerElementIndependence:
         )
 
     def test_log_per_group_values_perturbed_independently(self):
-        """Each element in a per-group log hyperparameter list should get independent random draws."""
+        """Each element in a per-group log hyperparameter
+        list should get independent random draws."""
         perturber = Perturber()
         schema = {
             "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": False},
