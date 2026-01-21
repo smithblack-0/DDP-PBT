@@ -10,11 +10,11 @@ import pytest
 from unittest.mock import Mock
 
 from src.ddp_pbt.base.crossbreeder import Crossbreeder
-from src.ddp_pbt.base.perturber import Perturber as Permuter
+from src.ddp_pbt.base.perturber import Perturber
 
 
 class TestCrossbreederSetup:
-    """Tests setup methods for schema and permuter."""
+    """Tests setup methods for schema and perturber."""
 
     def test_setup_schema_stores_reference(self):
         """Crossbreeder should store schema for blending operations."""
@@ -33,26 +33,26 @@ class TestCrossbreederSetup:
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
         assert "lr" in result
 
-    def test_setup_permuter_stores_reference(self):
-        """Crossbreeder should store permuter for probabilistic mutation."""
+    def test_setup_perturber_stores_reference(self):
+        """Crossbreeder should store perturber for probabilistic mutation."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
         }
         crossbreeder.setup_schema(schema)
 
-        permuter = Mock(spec=Permuter)
-        permuter.perturb.return_value = {"lr": [0.0015]}
-        crossbreeder.setup_permuter(permuter)
+        perturber = Mock(spec=Perturber)
+        perturber.perturb.return_value = {"lr": [0.0015]}
+        crossbreeder.setup_perturber(perturber)
 
-        # With mutation_rate=1.0, permuter should be called
+        # With mutation_rate=1.0, perturber should be called
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
         random.seed(42)
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # Permuter should have been called
-        assert permuter.perturb.called
+        # Perturber should have been called
+        assert perturber.perturb.called
 
 
 class TestCrossbreederParentSelection:
@@ -210,16 +210,16 @@ class TestCrossbreederProbabilisticMutation:
     """Tests probabilistic mutation after crossbreeding."""
 
     def test_mutation_rate_zero_never_mutates(self):
-        """With mutation_rate=0.0, permuter should never be called."""
+        """With mutation_rate=0.0, perturber should never be called."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
         }
         crossbreeder.setup_schema(schema)
 
-        permuter = Mock(spec=Permuter)
-        permuter.perturb.return_value = {"lr": [0.999]}
-        crossbreeder.setup_permuter(permuter)
+        perturber = Mock(spec=Perturber)
+        perturber.perturb.return_value = {"lr": [0.999]}
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
@@ -228,20 +228,20 @@ class TestCrossbreederProbabilisticMutation:
         for _ in range(10):
             result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # Permuter should never be called
-        assert not permuter.perturb.called
+        # Perturber should never be called
+        assert not perturber.perturb.called
 
     def test_mutation_rate_one_always_mutates(self):
-        """With mutation_rate=1.0, permuter should always be called."""
+        """With mutation_rate=1.0, perturber should always be called."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
         }
         crossbreeder.setup_schema(schema)
 
-        permuter = Mock(spec=Permuter)
-        permuter.perturb.return_value = {"lr": [0.999]}
-        crossbreeder.setup_permuter(permuter)
+        perturber = Mock(spec=Perturber)
+        perturber.perturb.return_value = {"lr": [0.999]}
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
@@ -250,29 +250,29 @@ class TestCrossbreederProbabilisticMutation:
         call_count = 0
         for _ in range(10):
             result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
-            call_count = permuter.perturb.call_count
+            call_count = perturber.perturb.call_count
 
-        # Permuter should be called every time
+        # Perturber should be called every time
         assert call_count == 10
 
     def test_mutation_returns_permuted_result(self):
-        """When mutation occurs, should return permuter's result."""
+        """When mutation occurs, should return perturber's result."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True}
         }
         crossbreeder.setup_schema(schema)
 
-        permuter = Mock(spec=Permuter)
-        permuter.perturb.return_value = {"lr": [0.123456]}
-        crossbreeder.setup_permuter(permuter)
+        perturber = Mock(spec=Perturber)
+        perturber.perturb.return_value = {"lr": [0.123456]}
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
 
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # Result should be what permuter returned
+        # Result should be what perturber returned
         assert result["lr"][0] == 0.123456
 
     def test_mutation_rate_partial_mutates_probabilistically(self):
@@ -283,9 +283,9 @@ class TestCrossbreederProbabilisticMutation:
         }
         crossbreeder.setup_schema(schema)
 
-        permuter = Mock(spec=Permuter)
-        permuter.perturb.return_value = {"lr": [0.999]}
-        crossbreeder.setup_permuter(permuter)
+        perturber = Mock(spec=Perturber)
+        perturber.perturb.return_value = {"lr": [0.999]}
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
@@ -295,8 +295,8 @@ class TestCrossbreederProbabilisticMutation:
         for _ in range(50):
             result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # With mutation_rate=0.5, permuter should be called roughly half the time
-        call_count = permuter.perturb.call_count
+        # With mutation_rate=0.5, perturber should be called roughly half the time
+        call_count = perturber.perturb.call_count
         # Allow some variance (between 15 and 35 out of 50)
         assert 15 <= call_count <= 35
 
