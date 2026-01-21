@@ -144,7 +144,9 @@ class TestMakeTopScoreStrategyFactory:
         params = [torch.nn.Parameter(torch.randn(3, 3))]
         optimizer = torch.optim.Adam(params, lr=0.001)
 
-        strategy = make_top_score_strategy(optimizer)
+        # Mock Communication class since distributed world not initialized
+        mock_comm_class = Mock(return_value=Mock(spec=Communication))
+        strategy = make_top_score_strategy(optimizer, communication_class=mock_comm_class)
 
         # Should be TopScoreStrategy instance
         assert isinstance(strategy, TopScoreStrategy)
@@ -165,7 +167,9 @@ class TestMakeTopScoreStrategyFactory:
             "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True}
         }
 
-        strategy = make_top_score_strategy(optimizer, config=config)
+        # Mock Communication class since distributed world not initialized
+        mock_comm_class = Mock(return_value=Mock(spec=Communication))
+        strategy = make_top_score_strategy(optimizer, config=config, communication_class=mock_comm_class)
 
         # Schema should be loaded
         assert strategy.schema == config
