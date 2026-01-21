@@ -85,7 +85,7 @@ class TopPopulationAsexualStrategy(AbstractStrategy):
         validation_metrics = np.array(validation_metrics)
         ascending_order = np.argsort(validation_metrics)
         top_k = ascending_order[:self._num_k]
-        choice = int(np.random.choice(top_k, size=1))
+        choice = int(np.random.choice(top_k))
 
         # Create and return the worker's choice. All workers make
         # independent choices
