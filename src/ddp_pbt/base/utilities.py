@@ -3,8 +3,8 @@ A set of utilities commonly used throughout various functions
 are located here
 """
 
-from typing import Any, Generator, Dict, Tuple, List, Union, Optional, TypeAlias
 from collections import defaultdict
+from typing import Any, Dict, Generator, List, Optional, Tuple, TypeAlias, Union
 
 import torch
 
@@ -24,10 +24,12 @@ RestrictedPyTree: TypeAlias = Union[
 ]
 PyTreePatch: TypeAlias = Tuple[str, PyTreeLeaf]
 
-def _recursive_walk_pytrees(pytrees: List[PyTree],
-                            remaining_depth: int,
-                            path: Optional[str],
-                            )->Generator[Tuple[str, List[PyTreeLeaf]], None, None]:
+
+def _recursive_walk_pytrees(
+    pytrees: List[PyTree],
+    remaining_depth: int,
+    path: Optional[str],
+) -> Generator[Tuple[str, List[PyTreeLeaf]], None, None]:
     """
     Recursively walks the pytree. Yields the leaf pairs as it goes, and
     throws if keys are insane. It walks the pytree collections in sync.
@@ -94,9 +96,11 @@ def _recursive_walk_pytrees(pytrees: List[PyTree],
     else:
         yield path, pytrees
 
-def patch_pytree(pytree: PyTree,
-                 patches: List[PyTreePatch]
-                 ) -> PyTree:
+
+def patch_pytree(
+    pytree: PyTree,
+    patches: List[PyTreePatch],
+) -> PyTree:
     """
     Mutates the pytree to apply the patch
     A patch is a tuple containing the path,
@@ -119,7 +123,9 @@ def patch_pytree(pytree: PyTree,
         group = path.split("/", 1)
 
         if isinstance(value, (dict, list, tuple)):
-            raise RuntimeError(f"Attempt to change schema by patching in value. Use namedtuple instead")
+            raise RuntimeError(
+                "Attempt to change schema by patching in value. Use namedtuple instead"
+            )
 
         if len(group) > 1:
             # Has suffix, tree goes deeper.
@@ -139,9 +145,9 @@ def patch_pytree(pytree: PyTree,
     if isinstance(pytree, dict):
         processing_pytree = pytree
     elif isinstance(pytree, (list, tuple)):
-        processing_pytree = {str(i) : node for i, node in enumerate(pytree)}
+        processing_pytree = {str(i): node for i, node in enumerate(pytree)}
     else:
-        raise TypeError(f"At root pytree was not dict, tuple, or list: Cannot patch")
+        raise TypeError("At root pytree was not dict, tuple, or list: Cannot patch")
 
     # Process all branches.
     output = {}
@@ -163,7 +169,7 @@ def patch_pytree(pytree: PyTree,
         msg = f"Patches present that are not used: {patch_collections}"
         raise RuntimeError(msg)
     if len(set_collection) > 0:
-        msg =f"Attempted to set values that did not originally exist: {set_collection}"
+        msg = f"Attempted to set values that did not originally exist: {set_collection}"
         raise RuntimeError(msg)
 
     # Return. Do necessary conversions
@@ -177,13 +183,15 @@ def patch_pytree(pytree: PyTree,
     elif isinstance(pytree, tuple):
         pytree = tuple(output.values())
     else:
-        raise RuntimeError(f"Illegal state detected in patch_pytree: Contact maintainer")
+        raise RuntimeError("Illegal state detected in patch_pytree: Contact maintainer")
 
     return pytree
 
-def walk_pytree_collection(*pytrees: PyTree,
-                 max_depth: int = 3,
-                 )->Generator[Tuple[str, List[PyTreeLeaf]], None, None]:
+
+def walk_pytree_collection(
+    *pytrees: PyTree,
+    max_depth: int = 3,
+) -> Generator[Tuple[str, List[PyTreeLeaf]], None, None]:
     """
     Walks a collection of pytrees in parallel, gathering the
     common paths under one key as a list. Dictionary, List, and
@@ -198,9 +206,11 @@ def walk_pytree_collection(*pytrees: PyTree,
     """
     yield from _recursive_walk_pytrees(list(pytrees), max_depth, None)
 
-def walk_single_pytree(pytree: PyTree,
-                        max_depth: int = 3,
-                        )->Generator[Tuple[str, PyTreeLeaf], None, None]:
+
+def walk_single_pytree(
+    pytree: PyTree,
+    max_depth: int = 3,
+) -> Generator[Tuple[str, PyTreeLeaf], None, None]:
     """
     Walks a single pytree, yielding the path and the leafs it finds
     as it goes.

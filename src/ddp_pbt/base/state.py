@@ -3,12 +3,13 @@ State manages extraction and injection of tensors and hyperparameters from an op
 """
 
 import warnings
-from typing import Dict, List, Any, Optional
 from collections import defaultdict
+from typing import Any, Dict, List, Optional
 
 import torch
 
-from .utilities import walk_single_pytree, patch_pytree
+from .utilities import patch_pytree, walk_single_pytree
+
 
 class State:
     """
@@ -24,7 +25,11 @@ class State:
     - Provide list of valid hyperparameter paths for binding
     """
 
-    def __init__(self, optimizer: torch.optim.Optimizer, max_depth: int = 3):
+    def __init__(
+        self,
+        optimizer: torch.optim.Optimizer,
+        max_depth: int = 3,
+    ):
         """
         Initialize State with an optimizer reference.
 
@@ -51,7 +56,10 @@ class State:
                     paths_set.add(path)
         return sorted(paths_set)
 
-    def setup_schema(self, schema: Dict[str, Any]) -> None:
+    def setup_schema(
+        self,
+        schema: Dict[str, Any],
+    ) -> None:
         """
         Configure which hyperparameters to manage and their behavior.
 
@@ -71,13 +79,15 @@ class State:
         dict_tree = {}
 
         for path, value in walk_single_pytree(pytree, max_depth=-1):
-            if 'params' in path and isinstance(value, torch.Tensor):
+            if "params" in path and isinstance(value, torch.Tensor):
                 dict_tree[path] = value
 
         return dict_tree
 
-
-    def set_model_tensors(self, dict_tree: Dict[str, torch.Tensor]) -> None:
+    def set_model_tensors(
+        self,
+        dict_tree: Dict[str, torch.Tensor],
+    ) -> None:
         """
         Inject model parameters from Dictionary Tree in-place.
 
@@ -102,8 +112,7 @@ class State:
         :return: Dictionary Tree mapping paths to optimizer state tensors
         """
         converted_state = {
-            str(id(param)): state_dict
-            for param, state_dict in self.optimizer.state.items()
+            str(id(param)): state_dict for param, state_dict in self.optimizer.state.items()
         }
 
         dict_tree = {}
@@ -113,7 +122,10 @@ class State:
 
         return dict_tree
 
-    def set_optimizer_tensors(self, dict_tree: Dict[str, torch.Tensor]) -> None:
+    def set_optimizer_tensors(
+        self,
+        dict_tree: Dict[str, torch.Tensor],
+    ) -> None:
         """
         Inject optimizer state tensors from Dictionary Tree in-place.
 
@@ -122,8 +134,7 @@ class State:
         :param dict_tree: Dictionary Tree mapping paths to optimizer state tensors
         """
         converted_state = {
-            str(id(param)): state_dict
-            for param, state_dict in self.optimizer.state.items()
+            str(id(param)): state_dict for param, state_dict in self.optimizer.state.items()
         }
 
         for path, original_tensor in walk_single_pytree(converted_state, max_depth=-1):
@@ -158,13 +169,16 @@ class State:
                 )
                 raise RuntimeError(msg)
             else:
-                if self.schema[path]['shared']:
+                if self.schema[path]["shared"]:
                     value_list = value_list[:1]
                 output_dict[path] = value_list
 
         return output_dict
 
-    def set_hyperparam_values(self, values: Dict[str, List[float]]) -> None:
+    def set_hyperparam_values(
+        self,
+        values: Dict[str, List[float]],
+    ) -> None:
         """
         Inject hyperparameter values respecting shared vs per-group semantics.
 
@@ -179,7 +193,7 @@ class State:
         # Expand shared values to match param group count
         expanded_values = {}
         for path, value_list in values.items():
-            if self.schema[path]['shared']:
+            if self.schema[path]["shared"]:
                 expanded_values[path] = [value_list[0]] * len(self.optimizer.param_groups)
             else:
                 expanded_values[path] = value_list

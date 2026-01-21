@@ -6,8 +6,9 @@ Tests validate parent selection, blending behavior, and mutation integration.
 """
 
 import random
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from src.ddp_pbt.base.crossbreeder import Crossbreeder
 from src.ddp_pbt.base.perturber import Perturber
@@ -20,19 +21,18 @@ class TestCrossbreederSetup:
         """Crossbreeder should store schema for blending operations."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
         # Verify schema is stored by attempting crossbreeding
         world_hyperparameters = [
             {"lr": [0.001]},
-            {"lr": [0.002]}
+            {"lr": [0.002]},
         ]
         parent_weights = [0.5, 0.5]
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
         assert "lr" in result
-
 
 
 class TestCrossbreederHyperparameterCrossbreeding:
@@ -42,13 +42,13 @@ class TestCrossbreederHyperparameterCrossbreeding:
         """Linear parameters should crossbreed via discrete 50/50 choice per allele."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.001, "shared": True}
+            "weight_decay": {"type": "linear", "std": 0.001, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
         world_hyperparameters = [
             {"weight_decay": [0.01]},
-            {"weight_decay": [0.02]}
+            {"weight_decay": [0.02]},
         ]
         parent_weights = [0.5, 0.5]
 
@@ -70,13 +70,13 @@ class TestCrossbreederHyperparameterCrossbreeding:
         """Log parameters should crossbreed via discrete 50/50 choice per allele."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
-            "lr": {"type": "log", "std": 0.1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
         world_hyperparameters = [
             {"lr": [0.001]},
-            {"lr": [0.01]}
+            {"lr": [0.01]},
         ]
         parent_weights = [0.5, 0.5]
 
@@ -98,13 +98,13 @@ class TestCrossbreederHyperparameterCrossbreeding:
         """Per-group hyperparameters should crossbreed independently per allele."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
-            "weight_decay": {"type": "linear", "std": 0.001, "shared": False}
+            "weight_decay": {"type": "linear", "std": 0.001, "shared": False},
         }
         crossbreeder.setup_schema(schema)
 
         world_hyperparameters = [
             {"weight_decay": [0.01, 0.02]},
-            {"weight_decay": [0.03, 0.04]}
+            {"weight_decay": [0.03, 0.04]},
         ]
         parent_weights = [0.5, 0.5]
 
@@ -125,13 +125,13 @@ class TestCrossbreederHyperparameterCrossbreeding:
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "lr": {"type": "log", "std": 0.1, "shared": True},
-            "weight_decay": {"type": "linear", "std": 0.001, "shared": True}
+            "weight_decay": {"type": "linear", "std": 0.001, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
         world_hyperparameters = [
             {"lr": [0.001], "weight_decay": [0.01]},
-            {"lr": [0.01], "weight_decay": [0.02]}
+            {"lr": [0.01], "weight_decay": [0.02]},
         ]
         parent_weights = [0.5, 0.5]
 
@@ -145,7 +145,9 @@ class TestCrossbreederHyperparameterCrossbreeding:
 
         # Both parameters should crossbreed independently
         assert 0.001 in lr_results and 0.01 in lr_results, "lr should see both parent values"
-        assert 0.01 in wd_results and 0.02 in wd_results, "weight_decay should see both parent values"
+        assert (
+            0.01 in wd_results and 0.02 in wd_results
+        ), "weight_decay should see both parent values"
 
 
 class TestCrossbreederProbabilisticMutation:
@@ -155,7 +157,7 @@ class TestCrossbreederProbabilisticMutation:
         """With mutation_rate=0.0, perturber should never be called."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True}
+            "lr": {"type": "linear", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
@@ -177,7 +179,7 @@ class TestCrossbreederProbabilisticMutation:
         """With mutation_rate=1.0, each allele should be mutated."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True}
+            "lr": {"type": "linear", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
@@ -199,7 +201,7 @@ class TestCrossbreederProbabilisticMutation:
         """When mutation occurs, allele should be replaced with perturber's result."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True}
+            "lr": {"type": "linear", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
@@ -219,7 +221,7 @@ class TestCrossbreederProbabilisticMutation:
         """With 0 < mutation_rate < 1, each allele should mutate probabilistically."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.5)
         schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True}
+            "lr": {"type": "linear", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
@@ -248,7 +250,7 @@ class TestCrossbreederEdgeCases:
         """Should only use non-zero weighted parents from world_weights."""
         crossbreeder = Crossbreeder(parent_pool_depth=4, mutation_rate=0.0)
         schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True}
+            "lr": {"type": "linear", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
 
@@ -257,7 +259,7 @@ class TestCrossbreederEdgeCases:
             {"lr": [0.001]},
             {"lr": [0.002]},
             {"lr": [0.003]},
-            {"lr": [0.004]}
+            {"lr": [0.004]},
         ]
         parent_weights = [0.0, 0.5, 0.5, 0.0]  # Only workers 1 and 2 selected
 
@@ -269,7 +271,9 @@ class TestCrossbreederEdgeCases:
 
         # Should only see values from workers 1 and 2 (0.002 and 0.003)
         assert 0.002 in results and 0.003 in results, "Should see both selected parent values"
-        assert 0.001 not in results and 0.004 not in results, "Should not see non-selected parent values"
+        assert (
+            0.001 not in results and 0.004 not in results
+        ), "Should not see non-selected parent values"
 
     def test_empty_schema(self):
         """Crossbreeder with empty schema should handle empty hyperparameters."""

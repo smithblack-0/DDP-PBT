@@ -1,15 +1,16 @@
-from typing import List, Dict, Optional, Any, Type
-
-import torch
 import math
 import random
+from typing import Any, Dict, List, Optional, Type
+
 import numpy as np
+import torch
 from torch.optim import Optimizer
 
 from ..base.abstract_strategy import AbstractStrategy
-from ..base.state import State
 from ..base.communication import Communication
 from ..base.perturber import Perturber
+from ..base.state import State
+
 
 class WeightedAverageStrategy(AbstractStrategy):
     """
@@ -33,12 +34,14 @@ class WeightedAverageStrategy(AbstractStrategy):
     Alternatively, if you want to bind directly, you can pass in a config
     instead in the native schema language.
     """
-    def __init__(self,
-                 state: State,
-                 communication: Communication,
-                 perturber: Perturber,
-                 config: Optional[Dict[str, Any]] = None,
-                 ):
+
+    def __init__(
+        self,
+        state: State,
+        communication: Communication,
+        perturber: Perturber,
+        config: Optional[Dict[str, Any]] = None,
+    ):
         """
         :param state: The state object used for optimizer access
         :param communication: The communication objecct used for distributed work
@@ -49,10 +52,11 @@ class WeightedAverageStrategy(AbstractStrategy):
         self._perturber = perturber
         self._perturber.setup_schema(self.schema)
 
-    def score(self,
-              validation_metrics: List[float],
-              communication: Communication,
-              ) -> List[float]:
+    def score(
+        self,
+        validation_metrics: List[float],
+        communication: Communication,
+    ) -> List[float]:
         """
         Score each option. Since each round has a perturbation
         on the same hyperparameters from last round any effects
@@ -78,9 +82,9 @@ class WeightedAverageStrategy(AbstractStrategy):
         validation_metrics = np.abs(validation_metrics)
         norm = validation_metrics.sum()
         if norm > 0:
-            distribution = validation_metrics/norm
+            distribution = validation_metrics / norm
         else:
-            distribution = np.ones_like(validation_metrics)/validation_metrics.size
+            distribution = np.ones_like(validation_metrics) / validation_metrics.size
 
         # Return the distribution as the world weights
         return distribution.tolist()
@@ -89,7 +93,7 @@ class WeightedAverageStrategy(AbstractStrategy):
         self,
         world_weights: List[float],
         world_hyperparameters: List[Dict[str, List[float]]],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, List[float]]:
         """
         Average the hyperparameters together between every
@@ -101,7 +105,9 @@ class WeightedAverageStrategy(AbstractStrategy):
         weights = np.asarray(world_weights)
         result = {}
         for key in world_hyperparameters[0].keys():
-            key_entries = [hyperparameter_dict[key] for hyperparameter_dict in world_hyperparameters]
+            key_entries = [
+                hyperparameter_dict[key] for hyperparameter_dict in world_hyperparameters
+            ]
             key_entries = np.asarray(key_entries)
             new_subgenome = weights @ key_entries
             result[key] = new_subgenome.tolist()
@@ -114,7 +120,7 @@ class WeightedAverageStrategy(AbstractStrategy):
         self,
         world_weights: List[float],
         model_pytree: Dict[str, torch.Tensor],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduces the models by their weights using
@@ -126,19 +132,20 @@ class WeightedAverageStrategy(AbstractStrategy):
         self,
         world_weights: List[float],
         optimizer_pytree: Dict[str, torch.Tensor],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
-        """"
+        """ "
         Reduces the optimizers by their world weights
         """
         return communication.reduce_by_world_weights(world_weights, optimizer_pytree)
 
+
 def make_weighted_average_strategy(
-        optimizer: Optimizer,
-        max_hyperparameter_search_depth: int = 3,
-        config: Optional[Dict[str, Any]] = None,
-        communication_class: Type[Communication] = Communication,
-    )->WeightedAverageStrategy:
+    optimizer: Optimizer,
+    max_hyperparameter_search_depth: int = 3,
+    config: Optional[Dict[str, Any]] = None,
+    communication_class: Type[Communication] = Communication,
+) -> WeightedAverageStrategy:
     """
     Creates a valid and functioning weighted average
     strategy capable of averaging the runs together

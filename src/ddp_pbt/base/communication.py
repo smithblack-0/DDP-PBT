@@ -5,10 +5,13 @@ Handles gathering pytrees from all workers and reducing with weighted sums.
 Uses leaf-by-leaf operations for memory efficiency.
 """
 
+from typing import Any, Dict, List
+
 import torch
 import torch.distributed as dist
-from typing import Dict, List, Any
-from ddp_pbt.base.utilities import PyTree
+
+from .utilities import PyTree
+
 
 class Communication:
     """
@@ -18,7 +21,10 @@ class Communication:
     and computing weighted reductions across workers.
     """
 
-    def __init__(self, suppress_error: bool = False):
+    def __init__(
+        self,
+        suppress_error: bool = False,
+    ):
         """Initialize Communication (no state needed)."""
         if not dist.is_initialized():
             raise EnvironmentError("Distributed world is not initiated")
@@ -26,14 +32,17 @@ class Communication:
             raise EnvironmentError("No DDP-PBT algorithm can be executed with only one worker")
 
     @property
-    def world_size(self)->int:
+    def world_size(self) -> int:
         return dist.get_world_size()
 
     @property
-    def rank(self)->int:
+    def rank(self) -> int:
         return dist.get_rank()
 
-    def gather_pytree_list(self, pytree: PyTree) -> List[PyTree]:
+    def gather_pytree_list(
+        self,
+        pytree: PyTree,
+    ) -> List[PyTree]:
         """
         Gather arbitrary pytrees from all workers if needed.
         Usually used for transmitting hyperparameter genomes
@@ -49,14 +58,14 @@ class Communication:
         if not (dist.is_available() and dist.is_initialized()):
             raise NotImplementedError("Cannot use DDP-PBT in non-distributed mode")
         world_size = dist.get_world_size()
-        output_list = [None]*world_size
+        output_list = [None] * world_size
         dist.all_gather_object(output_list, pytree)
         return output_list
 
     def reduce_by_world_weights(
         self,
         world_weights: List[float],
-        dict_tree: Dict[str, torch.Tensor]
+        dict_tree: Dict[str, torch.Tensor],
     ):
         """
         Reduce dictionary tree using weighted sum across workers.

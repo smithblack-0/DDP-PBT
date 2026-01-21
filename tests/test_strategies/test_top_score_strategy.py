@@ -5,27 +5,27 @@ TopScoreStrategy selects the best-performing worker and perturbs their hyperpara
 Tests validate scoring logic, hyperparameter perturbation, and model/optimizer reduction.
 """
 
+import json
 import os
 import sys
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 import torch
-import torch.multiprocessing as mp
 import torch.distributed as dist
+import torch.multiprocessing as mp
 
-from src.ddp_pbt.Strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
-from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
-
+from src.ddp_pbt.base.state import State
+from src.ddp_pbt.Strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
 
 # Test Fixtures and Helpers
 
-def integration_worker(rank, world_size, output_dir, master_addr, master_port):
+
+def integration_worker(rank, world_size, output_dir, master_addr, master_port,):
     """Worker function for integration test."""
     # Setup environment
     os.environ["MASTER_ADDR"] = master_addr
@@ -50,8 +50,8 @@ def integration_worker(rank, world_size, output_dir, master_addr, master_port):
         results = []
         for round_idx in range(3):
             # Simulate training - just record current hyperparams
-            current_lr = optimizer.param_groups[0]['lr']
-            current_wd = optimizer.param_groups[0]['weight_decay']
+            current_lr = optimizer.param_groups[0]["lr"]
+            current_wd = optimizer.param_groups[0]["weight_decay"]
 
             # Simulate validation loss (rank 0 best in round 0, rank 1 best in round 1)
             if round_idx == 0:
@@ -61,12 +61,14 @@ def integration_worker(rank, world_size, output_dir, master_addr, master_port):
             else:
                 val_loss = float(rank + 1)
 
-            results.append({
-                "round": round_idx,
-                "lr": current_lr,
-                "weight_decay": current_wd,
-                "val_loss": val_loss
-            })
+            results.append(
+                {
+                    "round": round_idx,
+                    "lr": current_lr,
+                    "weight_decay": current_wd,
+                    "val_loss": val_loss,
+                }
+            )
 
             # Step strategy
             strategy.step(val_loss)
@@ -81,6 +83,7 @@ def integration_worker(rank, world_size, output_dir, master_addr, master_port):
 
 
 # Unit Tests
+
 
 class TestTopScoreStrategyScoring:
     """Tests score method that finds best worker."""
@@ -133,11 +136,13 @@ class TestTopScoreStrategyReduceHyperparameters:
         world_hyperparameters = [
             {"lr": [0.001]},
             {"lr": [0.002]},  # Winner
-            {"lr": [0.003]}
+            {"lr": [0.003]},
         ]
 
         result = strategy.reduce_hyperparameters(
-            world_weights, world_hyperparameters, communication
+            world_weights,
+            world_hyperparameters,
+            communication,
         )
 
         # Should have perturbed winner's values
@@ -169,7 +174,8 @@ class TestTopScoreStrategyReduceModels:
         result = strategy.reduce_models(world_weights, model_pytree, communication)
 
         communication.reduce_by_world_weights.assert_called_once_with(
-            world_weights, model_pytree
+            world_weights,
+            model_pytree,
         )
         assert result == expected_result
 
@@ -198,7 +204,8 @@ class TestTopScoreStrategyReduceOptimizer:
         result = strategy.reduce_optimizer(world_weights, optimizer_pytree, communication)
 
         communication.reduce_by_world_weights.assert_called_once_with(
-            world_weights, optimizer_pytree
+            world_weights,
+            optimizer_pytree,
         )
         assert result == expected_result
 
@@ -221,11 +228,11 @@ class TestTopScoreStrategyStep:
         communication = Mock(spec=Communication)
         communication.gather_pytree_list.side_effect = [
             [{"lr": [0.001]}, {"lr": [0.002]}],  # world_hyperparameters
-            [0.5, 0.3]  # validation_metrics
+            [0.5, 0.3],  # validation_metrics
         ]
         communication.reduce_by_world_weights.side_effect = [
             {"param1": torch.tensor([1.5])},  # reduced model
-            {"state1": torch.tensor([2.5])}   # reduced optimizer
+            {"state1": torch.tensor([2.5])},  # reduced optimizer
         ]
 
         perturber = Mock(spec=Perturber)
@@ -277,18 +284,21 @@ class TestMakeTopScoreStrategyFactory:
         optimizer = torch.optim.Adam(params, lr=0.001)
 
         config = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True},
         }
 
         # Mock Communication class since distributed world not initialized
         mock_comm_class = Mock(return_value=Mock(spec=Communication))
-        strategy = make_top_score_strategy(optimizer, config=config, communication_class=mock_comm_class)
+        strategy = make_top_score_strategy(
+            optimizer, config=config, communication_class=mock_comm_class
+        )
 
         # Schema should be loaded
         assert strategy.schema == config
 
 
 # Integration Tests
+
 
 @pytest.mark.distributed
 @pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")
@@ -330,4 +340,6 @@ class TestTopScoreStrategyIntegration:
             for rank_results in results:
                 for round_result in rank_results:
                     assert 0.001 <= round_result["lr"] <= 0.1, "LR should stay within bounds"
-                    assert 1e-5 <= round_result["weight_decay"] <= 0.01, "Weight decay should stay within bounds"
+                    assert (
+                        1e-5 <= round_result["weight_decay"] <= 0.01
+                    ), "Weight decay should stay within bounds"

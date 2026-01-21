@@ -5,32 +5,32 @@ TopPopulationSexualStrategy selects 2 parents from top-k and crossbreeds their h
 Tests validate parent selection, crossbreeding, root parent selection, and asymmetric reduction.
 """
 
+import json
 import os
 import sys
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pytest
 import torch
-import torch.multiprocessing as mp
 import torch.distributed as dist
-import numpy as np
+import torch.multiprocessing as mp
 
+from src.ddp_pbt.base.communication import Communication
+from src.ddp_pbt.base.crossbreeder import Crossbreeder
+from src.ddp_pbt.base.perturber import Perturber
+from src.ddp_pbt.base.state import State
 from src.ddp_pbt.Strategies.top_population_sexual_strategy import (
     TopPopulationSexualStrategy,
-    make_top_population_sexual_strategy
+    make_top_population_sexual_strategy,
 )
-from src.ddp_pbt.base.state import State
-from src.ddp_pbt.base.communication import Communication
-from src.ddp_pbt.base.perturber import Perturber
-from src.ddp_pbt.base.crossbreeder import Crossbreeder
-
 
 # Test Fixtures and Helpers
 
-def integration_worker_population_sexual(rank, world_size, output_dir, master_addr, master_port):
+
+def integration_worker_population_sexual(rank, world_size, output_dir, master_addr, master_port,):
     """Worker function for integration test."""
     # Setup environment
     os.environ["MASTER_ADDR"] = master_addr
@@ -51,7 +51,7 @@ def integration_worker_population_sexual(rank, world_size, output_dir, master_ad
             reproduction_percentage=0.67,
             optimizer=optimizer,
             mutation_rate=0.1,
-            max_hyperparameter_search_depth=3
+            max_hyperparameter_search_depth=3,
         )
         strategy.bind_linear_hyperparameter("lr", std=0.001, min=0.001, max=0.1)
         strategy.bind_log_hyperparameter("weight_decay", std=0.1, min=1e-5, max=0.01)
@@ -60,18 +60,20 @@ def integration_worker_population_sexual(rank, world_size, output_dir, master_ad
         results = []
         for round_idx in range(3):
             # Simulate training - just record current hyperparams
-            current_lr = optimizer.param_groups[0]['lr']
-            current_wd = optimizer.param_groups[0]['weight_decay']
+            current_lr = optimizer.param_groups[0]["lr"]
+            current_wd = optimizer.param_groups[0]["weight_decay"]
 
             # Simulate validation loss (varying by rank)
             val_loss = float(rank + 1) * 0.5
 
-            results.append({
-                "round": round_idx,
-                "lr": current_lr,
-                "weight_decay": current_wd,
-                "val_loss": val_loss
-            })
+            results.append(
+                {
+                    "round": round_idx,
+                    "lr": current_lr,
+                    "weight_decay": current_wd,
+                    "val_loss": val_loss,
+                }
+            )
 
             # Step strategy
             strategy.step(val_loss)
@@ -87,6 +89,7 @@ def integration_worker_population_sexual(rank, world_size, output_dir, master_ad
 
 # Unit Tests
 
+
 class TestTopPopulationSexualStrategyScoring:
     """Tests score method that selects 2 parents from top-k."""
 
@@ -101,7 +104,9 @@ class TestTopPopulationSexualStrategyScoring:
         communication = Mock(spec=Communication)
         crossbreeder = Mock(spec=Crossbreeder)
 
-        strategy = TopPopulationSexualStrategy(num_k=1, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=1, state=state, communication=communication, crossbreeder=crossbreeder
+        )
         validation_metrics = [0.5]  # Only 1 worker
 
         with pytest.raises(ValueError, match="Cannot crossbreed with less than 2 workers"):
@@ -119,7 +124,9 @@ class TestTopPopulationSexualStrategyScoring:
         crossbreeder = Mock(spec=Crossbreeder)
 
         # num_k=5 but only 3 workers
-        strategy = TopPopulationSexualStrategy(num_k=5, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=5, state=state, communication=communication, crossbreeder=crossbreeder
+        )
         validation_metrics = [0.5, 0.1, 0.3]
 
         with pytest.raises(ValueError, match="parent_pool_depth.*cannot exceed world_size"):
@@ -137,7 +144,9 @@ class TestTopPopulationSexualStrategyScoring:
         crossbreeder = Mock(spec=Crossbreeder)
 
         # Create strategy with k=2
-        strategy = TopPopulationSexualStrategy(num_k=2, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=2, state=state, communication=communication, crossbreeder=crossbreeder
+        )
 
         # Validation metrics: [0.5, 0.1, 0.3]
         # Ascending order (best first): [1, 2, 0] (indices)
@@ -176,7 +185,9 @@ class TestTopPopulationSexualStrategyScoring:
         communication = Mock(spec=Communication)
         crossbreeder = Mock(spec=Crossbreeder)
 
-        strategy = TopPopulationSexualStrategy(num_k=3, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=3, state=state, communication=communication, crossbreeder=crossbreeder
+        )
         validation_metrics = [0.5, 0.1, 0.3]
 
         # Run multiple times
@@ -186,7 +197,9 @@ class TestTopPopulationSexualStrategyScoring:
 
             # root_parent should be one of the selected parents
             parent_indices = [i for i, w in enumerate(world_weights) if w > 0]
-            assert strategy.root_parent in parent_indices, "root_parent must be one of selected parents"
+            assert (
+                strategy.root_parent in parent_indices
+            ), "root_parent must be one of selected parents"
 
             root_parents_seen.add(strategy.root_parent)
 
@@ -205,7 +218,9 @@ class TestTopPopulationSexualStrategyScoring:
         crossbreeder = Mock(spec=Crossbreeder)
 
         # k=2, world_size=2 means both workers are top-k
-        strategy = TopPopulationSexualStrategy(num_k=2, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=2, state=state, communication=communication, crossbreeder=crossbreeder
+        )
         validation_metrics = [0.5, 0.1]
 
         world_weights = strategy.score(validation_metrics, communication)
@@ -232,23 +247,28 @@ class TestTopPopulationSexualStrategyReduceHyperparameters:
         crossbreeder = Mock(spec=Crossbreeder)
         crossbreeder.crossbreed_hyperparameters.return_value = {"lr": [0.0015]}
 
-        strategy = TopPopulationSexualStrategy(num_k=2, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=2, state=state, communication=communication, crossbreeder=crossbreeder
+        )
 
         # Two parents selected
         world_weights = [0.0, 0.5, 0.5]
         world_hyperparameters = [
             {"lr": [0.001]},
             {"lr": [0.002]},  # Parent 1
-            {"lr": [0.003]}   # Parent 2
+            {"lr": [0.003]},  # Parent 2
         ]
 
         result = strategy.reduce_hyperparameters(
-            world_weights, world_hyperparameters, communication
+            world_weights,
+            world_hyperparameters,
+            communication,
         )
 
         # Should have called crossbreeder with correct arguments
         crossbreeder.crossbreed_hyperparameters.assert_called_once_with(
-            world_hyperparameters, world_weights
+            world_hyperparameters,
+            world_weights,
         )
         assert result == {"lr": [0.0015]}
 
@@ -269,7 +289,9 @@ class TestTopPopulationSexualStrategyReduceModels:
         communication.reduce_by_world_weights.return_value = expected_result
 
         crossbreeder = Mock(spec=Crossbreeder)
-        strategy = TopPopulationSexualStrategy(num_k=2, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=2, state=state, communication=communication, crossbreeder=crossbreeder
+        )
 
         # Set root_parent to index 1
         strategy.root_parent = 1
@@ -309,7 +331,9 @@ class TestTopPopulationSexualStrategyReduceOptimizer:
         communication.reduce_by_world_weights.return_value = expected_result
 
         crossbreeder = Mock(spec=Crossbreeder)
-        strategy = TopPopulationSexualStrategy(num_k=2, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=2, state=state, communication=communication, crossbreeder=crossbreeder
+        )
 
         # Set root_parent to index 2
         strategy.root_parent = 2
@@ -351,17 +375,19 @@ class TestTopPopulationSexualStrategyStep:
         communication = Mock(spec=Communication)
         communication.gather_pytree_list.side_effect = [
             [{"lr": [0.001]}, {"lr": [0.002]}],  # world_hyperparameters
-            [0.5, 0.3]  # validation_metrics
+            [0.5, 0.3],  # validation_metrics
         ]
         communication.reduce_by_world_weights.side_effect = [
             {"param1": torch.tensor([1.5])},  # reduced model
-            {"state1": torch.tensor([2.5])}   # reduced optimizer
+            {"state1": torch.tensor([2.5])},  # reduced optimizer
         ]
 
         crossbreeder = Mock(spec=Crossbreeder)
         crossbreeder.crossbreed_hyperparameters.return_value = {"lr": [0.0015]}
 
-        strategy = TopPopulationSexualStrategy(num_k=2, state=state, communication=communication, crossbreeder=crossbreeder)
+        strategy = TopPopulationSexualStrategy(
+            num_k=2, state=state, communication=communication, crossbreeder=crossbreeder
+        )
 
         # Call step
         strategy.step(0.5)
@@ -398,7 +424,7 @@ class TestMakeTopPopulationSexualStrategyFactory:
             optimizer=optimizer,
             mutation_rate=0.05,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
 
         # Should be TopPopulationSexualStrategy instance
@@ -419,7 +445,7 @@ class TestMakeTopPopulationSexualStrategyFactory:
             optimizer=optimizer,
             mutation_rate=0.1,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
 
         # Strategy should be functional - test with builder pattern
@@ -432,7 +458,7 @@ class TestMakeTopPopulationSexualStrategyFactory:
         optimizer = torch.optim.Adam(params, lr=0.001)
 
         config = {
-            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True}
+            "lr": {"type": "log", "std": 0.1, "min": 1e-5, "max": 1e-1, "shared": True},
         }
 
         # Mock Communication class
@@ -446,7 +472,7 @@ class TestMakeTopPopulationSexualStrategyFactory:
             mutation_rate=0.1,
             max_hyperparameter_search_depth=3,
             config=config,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
 
         # Schema should be loaded
@@ -468,7 +494,7 @@ class TestMakeTopPopulationSexualStrategyFactory:
             optimizer=optimizer,
             mutation_rate=0.0,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
         assert isinstance(strategy_0, TopPopulationSexualStrategy)
 
@@ -478,12 +504,13 @@ class TestMakeTopPopulationSexualStrategyFactory:
             optimizer=optimizer,
             mutation_rate=1.0,
             max_hyperparameter_search_depth=3,
-            communication_class=mock_comm_class
+            communication_class=mock_comm_class,
         )
         assert isinstance(strategy_1, TopPopulationSexualStrategy)
 
 
 # Integration Tests
+
 
 @pytest.mark.distributed
 @pytest.mark.skipif(sys.platform == "win32", reason="GLOO not supported on Windows")
@@ -524,4 +551,6 @@ class TestTopPopulationSexualStrategyIntegration:
             for rank_results in results:
                 for round_result in rank_results:
                     assert 0.001 <= round_result["lr"] <= 0.1, "LR should stay within bounds"
-                    assert 1e-5 <= round_result["weight_decay"] <= 0.01, "Weight decay should stay within bounds"
+                    assert (
+                        1e-5 <= round_result["weight_decay"] <= 0.01
+                    ), "Weight decay should stay within bounds"

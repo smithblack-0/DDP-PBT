@@ -14,19 +14,20 @@ degradation in the averaging process. Empirical
 evidence will tell.
 """
 
-from typing import List, Dict, Optional, Any, Type
-
-import torch
 import math
 import random
+from typing import Any, Dict, List, Optional, Type
+
 import numpy as np
+import torch
 from torch.optim import Optimizer
 
 from ..base import Crossbreeder
 from ..base.abstract_strategy import AbstractStrategy
-from ..base.state import State
 from ..base.communication import Communication
 from ..base.perturber import Perturber
+from ..base.state import State
+
 
 class TopPopulationSexualStrategy(AbstractStrategy):
     """
@@ -49,13 +50,14 @@ class TopPopulationSexualStrategy(AbstractStrategy):
     instead in the native schema language.
     """
 
-    def __init__(self,
-                 num_k: int,
-                 state: State,
-                 communication: Communication,
-                 crossbreeder: Crossbreeder,
-                 config: Optional[Dict[str, Any]] = None,
-                 ):
+    def __init__(
+        self,
+        num_k: int,
+        state: State,
+        communication: Communication,
+        crossbreeder: Crossbreeder,
+        config: Optional[Dict[str, Any]] = None,
+    ):
         """
         :param num_k: Number of k. Cannot be larger than world size.
         :param state: The state object used for optimizer access
@@ -69,10 +71,11 @@ class TopPopulationSexualStrategy(AbstractStrategy):
         self._num_k = num_k
         self.root_parent = 0
 
-    def score(self,
-              validation_metrics: List[float],
-              communication: Communication,
-              ) -> List[float]:
+    def score(
+        self,
+        validation_metrics: List[float],
+        communication: Communication,
+    ) -> List[float]:
         """
         Select 2 parents from top parent_pool_depth workers.
 
@@ -92,14 +95,14 @@ class TopPopulationSexualStrategy(AbstractStrategy):
         # Validate we have enough workers
         if len(validation_metrics) < 2:
             raise ValueError(
-                f"Cannot crossbreed with less than 2 workers, got {len(validation_metrics)}"
+                f"Cannot crossbreed with less than 2 workers, got {len(validation_metrics)}",
             )
         if self._num_k > len(validation_metrics):
             raise ValueError(
-                f"parent_pool_depth ({self._num_k}) cannot exceed world_size ({len(validation_metrics)})"
+                f"parent_pool_depth ({self._num_k}) cannot exceed world_size ({len(validation_metrics)})",
             )
 
-        top_pool = sorted_indexes[:self._num_k]
+        top_pool = sorted_indexes[: self._num_k]
 
         # Randomly select 2 parents from pool
         # Both have a 50% selection rate.
@@ -115,10 +118,10 @@ class TopPopulationSexualStrategy(AbstractStrategy):
         return result_weights
 
     def reduce_hyperparameters(
-            self,
-            world_weights: List[float],
-            world_hyperparameters: List[Dict[str, List[float]]],
-            communication: Communication
+        self,
+        world_weights: List[float],
+        world_hyperparameters: List[Dict[str, List[float]]],
+        communication: Communication,
     ) -> Dict[str, List[float]]:
         """
         Crossbreed the hyperparameters using the
@@ -127,40 +130,41 @@ class TopPopulationSexualStrategy(AbstractStrategy):
         return self._crossbreeder.crossbreed_hyperparameters(world_hyperparameters, world_weights)
 
     def reduce_models(
-            self,
-            world_weights: List[float],
-            model_pytree: Dict[str, torch.Tensor],
-            communication: Communication
+        self,
+        world_weights: List[float],
+        model_pytree: Dict[str, torch.Tensor],
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduces the models by their weights using
         the communicator.
         """
-        selection_weights = [0.0]*len(world_weights)
+        selection_weights = [0.0] * len(world_weights)
         selection_weights[self.root_parent] = 1.0
         return communication.reduce_by_world_weights(selection_weights, model_pytree)
 
     def reduce_optimizer(
-            self,
-            world_weights: List[float],
-            optimizer_pytree: Dict[str, torch.Tensor],
-            communication: Communication
+        self,
+        world_weights: List[float],
+        optimizer_pytree: Dict[str, torch.Tensor],
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
-        """"
+        """ "
         Reduces the optimizers by their world weights
         """
-        selection_weights = [0.0]*len(world_weights)
+        selection_weights = [0.0] * len(world_weights)
         selection_weights[self.root_parent] = 1.0
         return communication.reduce_by_world_weights(selection_weights, optimizer_pytree)
 
+
 def make_top_population_sexual_strategy(
-        reproduction_percentage: float,
-        optimizer: Optimizer,
-        mutation_rate: float = 0.05,
-        max_hyperparameter_search_depth: int = 3,
-        communication_class: Type[Communication] = Communication,
-        config: Optional[Dict[str, Any]] = None
-        )->TopPopulationSexualStrategy:
+    reproduction_percentage: float,
+    optimizer: Optimizer,
+    mutation_rate: float = 0.05,
+    max_hyperparameter_search_depth: int = 3,
+    communication_class: Type[Communication] = Communication,
+    config: Optional[Dict[str, Any]] = None,
+) -> TopPopulationSexualStrategy:
     """
     Creates a valid and functioning population asexual
     reproduction strategy that keeps separate genomes on
@@ -204,7 +208,7 @@ def make_top_population_sexual_strategy(
     assert reproduction_percentage >= 0.0 and reproduction_percentage <= 1.0
     communicator = communication_class()
     world_size = communicator.world_size
-    top_k = int(world_size*reproduction_percentage)
+    top_k = int(world_size * reproduction_percentage)
 
     # Build and return
     crossbreeder = Crossbreeder(top_k, mutation_rate)

@@ -7,11 +7,13 @@ reduce_models, and reduce_optimizer.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
+
 import torch
 from torch.optim.lr_scheduler import LRScheduler
-from .state import State
+
 from .communication import Communication
+from .state import State
 
 
 def validate_log_schema_entry(config: Dict[str, Any]) -> None:
@@ -167,11 +169,12 @@ class AbstractStrategy(LRScheduler, ABC):
     Concrete strategies must implement all four abstract methods coherently.
     """
 
-    def __init__(self,
-                 state: State,
-                 communication: Communication,
-                 config: Optional[Dict[str, Dict[str, Any]]] = None
-                 ):
+    def __init__(
+        self,
+        state: State,
+        communication: Communication,
+        config: Optional[Dict[str, Dict[str, Any]]] = None,
+    ):
         """
         Initialize AbstractStrategy.
 
@@ -227,7 +230,7 @@ class AbstractStrategy(LRScheduler, ABC):
         std: float,
         min: float,
         max: Optional[float] = None,
-        shared: bool = True
+        shared: bool = True,
     ) -> None:
         """
         Builder method to bind a log-space hyperparameter.
@@ -251,7 +254,7 @@ class AbstractStrategy(LRScheduler, ABC):
             "type": "log",
             "std": std,
             "min": min,
-            "shared": shared
+            "shared": shared,
         }
         if max is not None:
             entry["max"] = max
@@ -268,7 +271,7 @@ class AbstractStrategy(LRScheduler, ABC):
         std: float,
         min: Optional[float] = None,
         max: Optional[float] = None,
-        shared: bool = True
+        shared: bool = True,
     ) -> None:
         """
         Builder method to bind a linear-space hyperparameter.
@@ -291,7 +294,7 @@ class AbstractStrategy(LRScheduler, ABC):
         entry = {
             "type": "linear",
             "std": std,
-            "shared": shared
+            "shared": shared,
         }
         if min is not None:
             entry["min"] = min
@@ -313,7 +316,10 @@ class AbstractStrategy(LRScheduler, ABC):
         """
         return self._schema
 
-    def load_state_dict(self, schema: Dict[str, Dict[str, Any]]) -> None:
+    def load_state_dict(
+        self,
+        schema: Dict[str, Dict[str, Any]],
+    ) -> None:
         """
         Restores schema from checkpoint.
 
@@ -327,7 +333,10 @@ class AbstractStrategy(LRScheduler, ABC):
         self._schema.clear()
         self._schema.update(schema)
 
-    def step(self, validation_metric: Optional[float] = None) -> None:  # type: ignore[override]
+    def step(
+        self,
+        validation_metric: Optional[float] = None,
+    ) -> None:  # type: ignore[override]
         """
         Execute round-end strategy step.
 
@@ -364,15 +373,21 @@ class AbstractStrategy(LRScheduler, ABC):
         world_weights = self.score(validation_metrics, self._communication)
 
         new_hyperparams = self.reduce_hyperparameters(
-            world_weights, world_hyperparameters, self._communication
+            world_weights,
+            world_hyperparameters,
+            self._communication,
         )
 
         new_model_pytree = self.reduce_models(
-            world_weights, local_model_pytree, self._communication
+            world_weights,
+            local_model_pytree,
+            self._communication,
         )
 
         new_optimizer_pytree = self.reduce_optimizer(
-            world_weights, local_optimizer_pytree, self._communication
+            world_weights,
+            local_optimizer_pytree,
+            self._communication,
         )
 
         # Phase 4: Inject results back
@@ -389,10 +404,14 @@ class AbstractStrategy(LRScheduler, ABC):
         Returns:
             List of learning rates, one per param group.
         """
-        return [group['lr'] for group in self.optimizer.param_groups]
+        return [group["lr"] for group in self.optimizer.param_groups]
 
     @abstractmethod
-    def score(self, validation_metrics: List[float], communication: Communication) -> List[float]:
+    def score(
+        self,
+        validation_metrics: List[float],
+        communication: Communication,
+    ) -> List[float]:
         """
         Compute world weights from validation metric.
 
@@ -410,7 +429,7 @@ class AbstractStrategy(LRScheduler, ABC):
         self,
         world_weights: List[float],
         world_hyperparameters: List[Dict[str, List[float]]],
-        communication
+        communication,
     ) -> Dict[str, List[float]]:
         """
         Reduce hyperparameters across workers.
@@ -430,7 +449,7 @@ class AbstractStrategy(LRScheduler, ABC):
         self,
         world_weights: List[float],
         model_pytree: Dict[str, torch.Tensor],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduce model parameters across workers.
@@ -450,7 +469,7 @@ class AbstractStrategy(LRScheduler, ABC):
         self,
         world_weights: List[float],
         optimizer_pytree: Dict[str, torch.Tensor],
-        communication: Communication
+        communication: Communication,
     ) -> Dict[str, torch.Tensor]:
         """
         Reduce optimizer state across workers.
