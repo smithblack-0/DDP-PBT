@@ -21,9 +21,6 @@ class Communication:
     def __init__(self):
         """Initialize Communication (no state needed)."""
         pass
-    # Note to claude:
-    # Hey, can you go hook up the tests for this
-    # then remove this note?
 
     @property
     def world_size(self)->int:
