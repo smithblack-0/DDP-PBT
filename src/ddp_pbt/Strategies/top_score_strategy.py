@@ -142,33 +142,39 @@ class TopScoreStrategy(AbstractStrategy):
         return communication.reduce_by_world_weights(world_weights, optimizer_pytree)
 
 
-# Note to claude: This has been deliberately broken.
-# This is not a correctly implemented factory. The
-# Factory is the correct place to gather the
-# max depth, etc, dependencies.
-#
-# def make_top_score_strategy(
+def make_top_score_strategy(
     optimizer: torch.optim.Optimizer,
-    config: Optional[Dict[str, Dict[str, Any]]] = None
+    max_hyperparameter_search_depth: int = 3,
+    config: Optional[Dict[str, Dict[str, Any]]] = None,
+    communication_class: type = Communication
 ) -> TopScoreStrategy:
     """
     Factory function to create fully-wired TopScoreStrategy.
 
+    Creates a TopScoreStrategy with all dependencies properly wired.
+    The strategy selects the best-performing worker each round and
+    perturbs their hyperparameters for variation.
+
+    Use builder pattern methods to configure bindings:
+    - valid_binding_targets: Returns list of bindable hyperparameter paths
+    - bind_log_hyperparameter: Bind log-space parameter with std, min, optional max
+    - bind_linear_hyperparameter: Bind linear-space parameter with std, optional min/max
+
     Args:
         optimizer: PyTorch optimizer to manage.
-        config: Optional native JSON schema config dict.
+        max_hyperparameter_search_depth: How many layers deep to search param_groups
+            for bindable hyperparameters. Default 3.
+        config: Optional native JSON schema config dict for pre-configured bindings.
+        communication_class: Communication class to instantiate for distributed ops.
+            Default Communication.
 
     Returns:
         Ready-to-use TopScoreStrategy instance with all dependencies wired.
     """
-    state = State(optimizer)
-    communication = Communication()
+    communicator = communication_class()
     perturber = Perturber()
+    state = State(optimizer, max_hyperparameter_search_depth)
 
-    strategy = TopScoreStrategy(state, communication, config, perturber)
-
-    # Wire perturber schema if config was provided
-    if config:
-        perturber.setup_schema(config)
+    strategy = TopScoreStrategy(state, communicator, config, perturber)
 
     return strategy
