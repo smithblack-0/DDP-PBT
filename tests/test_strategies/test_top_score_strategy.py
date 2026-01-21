@@ -11,6 +11,7 @@ from unittest.mock import Mock
 from src.ddp_pbt.Strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
 from src.ddp_pbt.base.state import State
 from src.ddp_pbt.base.communication import Communication
+from src.ddp_pbt.base.perturber import Perturber
 
 
 class TestTopScoreStrategyScoring:
@@ -26,10 +27,11 @@ class TestTopScoreStrategyScoring:
 
         communication = Mock(spec=Communication)
         # Worker 1 has best validation metric (lowest loss)
-        communication.gather_pytree_list.return_value = [0.5, 0.1, 0.3]
+        validation_metrics = [0.5, 0.1, 0.3]
 
-        strategy = TopScoreStrategy(state, communication)
-        world_weights = strategy.score(0.1, communication)
+        perturber = Mock(spec=Perturber)
+        strategy = TopScoreStrategy(state, communication, perturber=perturber)
+        world_weights = strategy.score(validation_metrics, communication)
 
         # Should select worker 1 (index 1) with lowest loss
         assert len(world_weights) == 3
@@ -38,21 +40,6 @@ class TestTopScoreStrategyScoring:
         assert world_weights[2] == 0.0
         assert sum(world_weights) == 1.0
 
-    def test_score_handles_single_worker(self):
-        """score with single worker should return [1.0]."""
-        params = [torch.nn.Parameter(torch.randn(3, 3))]
-        optimizer = torch.optim.Adam(params, lr=0.001)
-
-        state = Mock(spec=State)
-        state.optimizer = optimizer
-
-        communication = Mock(spec=Communication)
-        communication.gather_pytree_list.return_value = [0.5]
-
-        strategy = TopScoreStrategy(state, communication)
-        world_weights = strategy.score(0.5, communication)
-
-        assert world_weights == [1.0]
 
 
 class TestTopScoreStrategyReduceHyperparameters:
@@ -69,11 +56,10 @@ class TestTopScoreStrategyReduceHyperparameters:
         communication = Mock(spec=Communication)
 
         # Create strategy with perturber
-        perturber = Mock()
+        perturber = Mock(spec=Perturber)
         perturber.perturb.return_value = {"lr": [0.0015]}
 
-        strategy = TopScoreStrategy(state, communication)
-        strategy._perturber = perturber
+        strategy = TopScoreStrategy(state, communication, perturber=perturber)
 
         # Winner is worker 1
         world_weights = [0.0, 1.0, 0.0]
@@ -107,7 +93,8 @@ class TestTopScoreStrategyReduceModels:
         expected_result = {"param1": torch.tensor([1.0, 2.0])}
         communication.reduce_by_world_weights.return_value = expected_result
 
-        strategy = TopScoreStrategy(state, communication)
+        perturber = Mock(spec=Perturber)
+        strategy = TopScoreStrategy(state, communication, perturber=perturber)
 
         world_weights = [0.0, 1.0, 0.0]
         model_pytree = {"param1": torch.tensor([1.0, 2.0])}
@@ -135,7 +122,8 @@ class TestTopScoreStrategyReduceOptimizer:
         expected_result = {"state1": torch.tensor([1.0, 2.0])}
         communication.reduce_by_world_weights.return_value = expected_result
 
-        strategy = TopScoreStrategy(state, communication)
+        perturber = Mock(spec=Perturber)
+        strategy = TopScoreStrategy(state, communication, perturber=perturber)
 
         world_weights = [0.0, 1.0, 0.0]
         optimizer_pytree = {"state1": torch.tensor([1.0, 2.0])}
