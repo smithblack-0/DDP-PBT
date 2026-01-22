@@ -133,7 +133,7 @@ class AbstractStrategy(LRScheduler, ABC):
     Base class for Population Based Training strategies.
     A schedule. With all the baggage.
 
-    Strategies bind to existing optimizer float values
+    strategies bind to existing optimizer float values
     then promise to update them by some means. This is
     the abstract version of that strategy promise. It
     primarily worries about figuring out what we
