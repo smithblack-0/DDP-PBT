@@ -21,7 +21,7 @@ import torch.multiprocessing as mp
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
 from src.ddp_pbt.base.state import State
-from src.ddp_pbt.Strategies.top_k_strategy import (
+from src.ddp_pbt.strategies.top_k_strategy import (
     TopKStrategy,
     make_top_k_strategy_by_selection_percentage,
     make_top_k_strategy_out_of_top_k,

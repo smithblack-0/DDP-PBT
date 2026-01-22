@@ -21,7 +21,7 @@ import torch.multiprocessing as mp
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
 from src.ddp_pbt.base.state import State
-from src.ddp_pbt.Strategies.top_population_asexual_strategy import (
+from src.ddp_pbt.strategies.top_population_asexual_strategy import (
     TopPopulationAsexualStrategy,
     make_top_population_asexual_strategy,
 )

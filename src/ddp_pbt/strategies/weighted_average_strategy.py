@@ -11,7 +11,6 @@ from ..base.communication import Communication
 from ..base.perturber import Perturber
 from ..base.state import State
 
-
 class WeightedAverageStrategy(AbstractStrategy):
     """
     A strategy binds to a collection of valid float

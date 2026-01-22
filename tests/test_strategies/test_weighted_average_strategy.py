@@ -21,7 +21,7 @@ import torch.multiprocessing as mp
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
 from src.ddp_pbt.base.state import State
-from src.ddp_pbt.Strategies.weighted_average_strategy import (
+from src.ddp_pbt.strategies.weighted_average_strategy import (
     WeightedAverageStrategy,
     make_weighted_average_strategy,
 )

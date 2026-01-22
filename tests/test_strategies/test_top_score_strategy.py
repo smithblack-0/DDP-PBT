@@ -20,7 +20,7 @@ import torch.multiprocessing as mp
 from src.ddp_pbt.base.communication import Communication
 from src.ddp_pbt.base.perturber import Perturber
 from src.ddp_pbt.base.state import State
-from src.ddp_pbt.Strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
+from src.ddp_pbt.strategies.top_score_strategy import TopScoreStrategy, make_top_score_strategy
 
 # Test Fixtures and Helpers
 
