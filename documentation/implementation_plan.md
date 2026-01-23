@@ -15,16 +15,18 @@ DDP-PBT implements Population Based Training with gradient sharing via DDP, elim
 ```python
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
-from ddp_pbt import make_top_score_strategy
+from ddp_pbt import make_top_score_strategy, Autobind
 
 # User wraps model with DDP
 model = DDP(model)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.01)
 
-# Create strategy via factory with builder pattern
+# Create strategy and configure via autobind (prototyping pattern)
 strategy = make_top_score_strategy(optimizer)
-strategy.bind_log_hyperparameter("lr", std=0.1, min=1e-4, max=1e-1)
-strategy.bind_linear_hyperparameter("weight_decay", std=0.001, min=0, max=0.1)
+autobind = Autobind()  # Loads defaults for lr, weight_decay, etc.
+autobind.bind_log_hyperparameter("lr", min=1e-6)  # Just tweak min bound
+autobind.bind_log_hyperparameter("weight_decay", max=0.05)  # Just tweak max bound
+autobind(strategy)  # Apply configuration
 
 # Training loop - user manages rounds
 ROUND_LENGTH = 1000
@@ -242,6 +244,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 **Interface**:
 - `valid_hyperparameter_paths` (property) → returns list of float-valued paths found in param_groups (bindable hyperparameters)
 - `setup_schema(schema)` → configure which hyperparameters to manage and their behavior (takes Schema)
+  - Stores schema reference (held by reference, can be mutated externally)
 - `get_model_tensors()` → returns Dictionary Tree of the model parameters (all param groups in one tree)
 - `set_model_tensors(dict_tree)` → inject Dictionary Tree back into model via optimizer in-place
 - `get_optimizer_tensors()` → returns Dictionary Tree of optimizer state tensors (momentum buffers, etc., all param groups in one tree)
@@ -249,6 +252,7 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 - `get_hyperparam_values()` → returns Hyperparameter Value
   - If shared=True: returns length-1 list `{"lr": [0.001]}`
   - If shared=False: returns per-group list `{"weight_decay": [0.01, 0.005]}`
+  - Clips values to schema min/max bounds during extraction (if specified in schema)
 - `set_hyperparam_values(values)` → update values in optimizer.param_groups (takes Hyperparameter Values)
   - If shared=True: broadcasts single value to all param groups
   - If shared=False: sets per-group values
@@ -372,11 +376,13 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 - `optimizer` → exposes the optimizer from State
 
 **Configuration** (builds Schema):
-- `bind_log_hyperparameter(name, std, min=None, max=None, shared=True)` → builder method for log parameters
+- `bind_log_hyperparameter(name, std, min, max=None, shared=True)` → builder method for log parameters
 - `bind_linear_hyperparameter(name, std, min=None, max=None, shared=True)` → builder method for linear parameters
 - Constructor accepts native JSON config dict
 - All methods validate that hyperparameter exists in at least one optimizer.param_group
 - Schema is passed to State via `state.setup_schema(schema)` after configuration
+
+**Note on bind methods**: These methods are primarily used internally by Autobind for applying configurations. Direct usage on AbstractStrategy is for dynamic runtime schema adjustment (advanced use case). Typical configuration workflow uses Autobind instead.
 
 **Serialization**:
 - `state_dict()` → returns Schema for checkpointing
@@ -580,6 +586,85 @@ at random instead.
 
 ---
 
+### 7. Autobind Defaults File
+
+**Purpose**: Provides sensible default configurations for common optimizer hyperparameters, enabling quick setup without manual specification.
+
+**File Location**: `src/ddp_pbt/autobind_defaults.json` - packaged with the library
+
+**Format**: Standard Schema JSON format as defined in Hyperparameter Schema section (lines 90-134). Each key is a hyperparameter name, each value is a schema configuration dict with type, std, min, max, shared fields.
+
+**Common Hyperparameters Included**:
+- `lr` - Learning rate (log-space)
+- `weight_decay` - Weight decay (log-space)
+- `momentum` - Momentum coefficient (linear-space, if applicable)
+- `betas` - Adam beta coefficients (tuple handling, log-space), "0" and "1" path.
+
+**Design Philosophy**: Conservative defaults with moderate exploration (std values promote stability over aggressive search). Users can override via prototype pattern or create custom default files.
+
+**User Custom Files**: Users can create their own default files in the same format and load them via Autobind constructor. These files follow the same Schema JSON format and can be saved/loaded for team/project sharing.
+
+---
+
+### 8. Autobind Object
+
+**Responsibility**: User-facing configuration interface with prototype pattern for schema customization and application to strategies.
+
+**Why needed**:
+- Primary interface for typical users (manual binding on AbstractStrategy is for dynamic runtime schema changes only)
+- Prototype pattern allows modifying defaults without full respecification (e.g., tweak only min/max bounds)
+- Enables loading/saving custom configurations for team/project sharing
+- Provides sensible defaults for common hyperparameters out of the box
+
+**Interface**:
+
+**Constructor:**
+- `__init__(file_path: Optional[str] = None, logging_callback: Optional[Callable[[str], None]] = None)`
+  - If file_path is None: loads schema from `src/ddp_pbt/autobind_defaults.json`
+  - If file_path provided: loads schema from that file
+  - If file_path provided but doesn't exist: falls back to `src/ddp_pbt/autobind_defaults.json`
+  - logging_callback: optional function for logging applied bindings (defaults to console print if None)
+
+**Configuration Methods (prototype pattern):**
+- `bind_log_hyperparameter(name: str, std: Optional[float] = None, min: Optional[float] = None, max: Optional[float] = None, shared: Optional[bool] = None)`
+  - If name exists in schema: updates only provided fields (partial update, prototype pattern)
+  - If name doesn't exist in schema: same contract as AbstractStrategy.bind_log_hyperparameter (std required, min required for log, max optional, shared optional defaults True)
+  - Validates using same validators as AbstractStrategy
+  - Modifies internal schema for later application
+
+- `bind_linear_hyperparameter(name: str, std: Optional[float] = None, min: Optional[float] = None, max: Optional[float] = None, shared: Optional[bool] = None)`
+  - If name exists in schema: updates only provided fields (partial update, prototype pattern)
+  - If name doesn't exist in schema: same contract as AbstractStrategy.bind_linear_hyperparameter (std required, min/max optional, shared optional defaults True)
+  - Validates using same validators as AbstractStrategy
+  - Modifies internal schema for later application
+
+**Application:**
+- `__call__(strategy: AbstractStrategy, only: Optional[List[str]] = None) -> None`
+  - Applies schema to strategy by calling strategy's bind_log_hyperparameter or bind_linear_hyperparameter methods
+  - Only applies hyperparameters that exist in BOTH internal schema AND strategy.valid_binding_targets
+  - If only provided: only applies specified subset of hyperparameters from schema
+  - Calls logging_callback (or prints to console) for each applied hyperparameter
+  - Overwrites any existing bindings on strategy, destroying them
+
+**Persistence:**
+- `save(file_path: str) -> None`
+  - Saves current internal schema to JSON file
+  - Format matches Schema JSON format (as defined in Hyperparameter Schema section)
+
+- `from_strategy(strategy: AbstractStrategy) -> Autobind` (instance method)
+  - Extracts schema from strategy via strategy.state_dict()
+  - Uses self.schema as base
+  - Merges: strategy schema values overwrite current schema where keys match
+  - Keys only in current schema remain unchanged
+  - Keys only in strategy schema are added
+  - Returns new Autobind instance with merged schema
+  - Useful for extracting working configurations to share with team/project
+
+**Dependencies**:
+- Schema (for validation and structure)
+- AbstractStrategy (for application and extraction)
+- AbstractStrategy validators (for validating bind method calls)
+
 ## Testing Guide
 
 **Black-box testing only**: Test public methods and documented behavior. Tests validate the contract is honored, not that specific implementation approaches are used.
@@ -687,6 +772,7 @@ Start with base components, test in isolation, then build up to strategies:
 - Perturber - hyperparameter mutation
 - Crossbreeder - hyperparameter blending
 - Communication - distributed operations
+- Autobind - user-facing configuration interface
 - AbstractStrategy - base class with orchestration
 
 **Strategy implementations** (concrete algorithms):
