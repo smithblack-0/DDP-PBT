@@ -381,6 +381,214 @@ class TestGetHyperparamValues:
         assert "weight_decay" in values
         assert len(values["weight_decay"]) == len(optimizer_multi_group.param_groups)
 
+    def test_clips_lr_above_max_bound(self, simple_model) -> None:
+        """Get hyperparam values clips learning rate above max bound to max."""
+        # Create optimizer with lr above max bound
+        optimizer = torch.optim.SGD(simple_model.parameters(), lr=0.5)
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "min": 1e-4,
+                "max": 0.1,
+                "shared": True,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify returned value was clipped to max
+        assert values["lr"][0] == 0.1
+
+    def test_clips_lr_below_min_bound(self, simple_model) -> None:
+        """Get hyperparam values clips learning rate below min bound to min."""
+        # Create optimizer with lr below min bound
+        optimizer = torch.optim.SGD(simple_model.parameters(), lr=1e-7)
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "min": 1e-4,
+                "max": 0.1,
+                "shared": True,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify returned value was clipped to min
+        assert values["lr"][0] == 1e-4
+
+    def test_lr_within_bounds_unchanged(self, simple_model) -> None:
+        """Get hyperparam values leaves learning rate unchanged when within bounds."""
+        # Create optimizer with lr within bounds
+        optimizer = torch.optim.SGD(simple_model.parameters(), lr=0.01)
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "min": 1e-4,
+                "max": 0.1,
+                "shared": True,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify returned value unchanged
+        assert values["lr"][0] == 0.01
+
+    def test_clips_per_group_hyperparameters_independently(self, simple_model) -> None:
+        """Get hyperparam values clips per-group hyperparameters independently."""
+        layers = list(simple_model.children())
+        # First group lr above max, second group lr below min
+        optimizer = torch.optim.SGD(
+            [
+                {"params": layers[0].parameters(), "lr": 0.5},
+                {"params": layers[1].parameters(), "lr": 1e-7},
+            ]
+        )
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "min": 1e-4,
+                "max": 0.1,
+                "shared": False,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify first group clipped to max, second to min
+        assert values["lr"][0] == 0.1
+        assert values["lr"][1] == 1e-4
+
+    def test_clips_shared_hyperparameters(self, simple_model) -> None:
+        """Get hyperparam values clips shared hyperparameters."""
+        layers = list(simple_model.children())
+        # Both groups have lr above max (shared means first group value matters)
+        optimizer = torch.optim.SGD(
+            [
+                {"params": layers[0].parameters(), "lr": 0.5},
+                {"params": layers[1].parameters(), "lr": 0.6},
+            ]
+        )
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "min": 1e-4,
+                "max": 0.1,
+                "shared": True,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify returned value clipped to max (shared returns length-1 list)
+        assert len(values["lr"]) == 1
+        assert values["lr"][0] == 0.1
+
+    def test_clips_linear_hyperparameter(self, simple_model) -> None:
+        """Get hyperparam values clips linear hyperparameter to bounds."""
+        # Create optimizer with weight_decay above max
+        optimizer = torch.optim.SGD(
+            simple_model.parameters(), lr=0.01, weight_decay=0.5
+        )
+
+        schema = {
+            "weight_decay": {
+                "type": "linear",
+                "std": 0.001,
+                "min": 0.0,
+                "max": 0.1,
+                "shared": True,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify returned weight_decay clipped to max
+        assert values["weight_decay"][0] == 0.1
+
+    def test_no_clipping_when_min_max_not_in_schema(self, simple_model) -> None:
+        """Get hyperparam values does not clip when min/max not specified."""
+        # Create optimizer with lr outside typical bounds
+        optimizer = torch.optim.SGD(simple_model.parameters(), lr=5.0)
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "shared": True,
+            }
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify returned lr unchanged (no bounds to clip to)
+        assert values["lr"][0] == 5.0
+
+    def test_clips_multiple_hyperparameters(self, simple_model) -> None:
+        """Get hyperparam values clips multiple hyperparameters when needed."""
+        # Create optimizer with both lr and weight_decay out of bounds
+        optimizer = torch.optim.SGD(
+            simple_model.parameters(), lr=0.5, weight_decay=0.5
+        )
+
+        schema = {
+            "lr": {
+                "type": "log",
+                "std": 0.1,
+                "min": 1e-4,
+                "max": 0.1,
+                "shared": True,
+            },
+            "weight_decay": {
+                "type": "linear",
+                "std": 0.001,
+                "min": 0.0,
+                "max": 0.1,
+                "shared": True,
+            },
+        }
+
+        state = State(optimizer)
+        state.setup_schema(schema)
+
+        values = state.get_hyperparam_values()
+
+        # Verify both returned values clipped to max
+        assert values["lr"][0] == 0.1
+        assert values["weight_decay"][0] == 0.1
+
 
 class TestSetHyperparamValues:
     """Tests that set_hyperparam_values updates hyperparameters correctly."""

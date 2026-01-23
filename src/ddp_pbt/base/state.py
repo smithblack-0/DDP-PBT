@@ -29,7 +29,7 @@ class State:
         self,
         optimizer: torch.optim.Optimizer,
         max_depth: int = 3,
-    ):
+):
         """
         Initialize State with an optimizer reference.
 
@@ -149,6 +149,8 @@ class State:
         For shared hyperparameters: returns length-1 list from first param group.
         For per-group hyperparameters: returns list of values from all param groups.
 
+        Values are clipped to schema min/max bounds during extraction if specified.
+
         :return: Hyperparameter Values dict
         """
         if self.schema is None:
@@ -158,7 +160,17 @@ class State:
         for param_group in self.optimizer.param_groups:
             for path, value in walk_single_pytree(param_group, max_depth=self.max_depth):
                 if isinstance(value, float) and path in self.schema:
-                    output[path].append(value)
+                    # Clip to schema bounds
+                    min_val = self.schema[path].get("min")
+                    max_val = self.schema[path].get("max")
+
+                    clipped_value = value
+                    if min_val is not None:
+                        clipped_value = max(min_val, clipped_value)
+                    if max_val is not None:
+                        clipped_value = min(max_val, clipped_value)
+
+                    output[path].append(clipped_value)
 
         output_dict = {}
         for path, value_list in output.items():
