@@ -26,7 +26,7 @@ strategy = make_top_score_strategy(optimizer)
 autobind = Autobind()  # Loads defaults for lr, weight_decay, etc.
 autobind.bind_log_hyperparameter("lr", min=1e-6)  # Just tweak min bound
 autobind.bind_log_hyperparameter("weight_decay", max=0.05)  # Just tweak max bound
-autobind(strategy)  # Apply configuration
+strategy = autobind(strategy)  # Apply configuration
 
 # Training loop - user manages rounds
 ROUND_LENGTH = 1000
@@ -610,6 +610,8 @@ at random instead.
 
 **Responsibility**: User-facing configuration interface with prototype pattern for schema customization and application to strategies.
 
+Basically, the idea is it loads a conservative defaults file that is usually good enough. If modifiations are needed, a prototyping pattern can be used to make them. Then once invoked, all relevant settings are transferred into the strategy based on if they are observed valid hyperparameter settings.
+
 **Why needed**:
 - Primary interface for typical users (manual binding on AbstractStrategy is for dynamic runtime schema changes only)
 - Prototype pattern allows modifying defaults without full respecification (e.g., tweak only min/max bounds)
@@ -639,25 +641,25 @@ at random instead.
   - Modifies internal schema for later application
 
 **Application:**
-- `__call__(strategy: AbstractStrategy, only: Optional[List[str]] = None) -> None`
+- `__call__(strategy: AbstractStrategy, only: Optional[List[str]] = None) -> AbstractStrategy`
   - Applies schema to strategy by calling strategy's bind_log_hyperparameter or bind_linear_hyperparameter methods
   - Only applies hyperparameters that exist in BOTH internal schema AND strategy.valid_binding_targets
   - If only provided: only applies specified subset of hyperparameters from schema
   - Calls logging_callback (or prints to console) for each applied hyperparameter
   - Overwrites any existing bindings on strategy, destroying them
+  - Returns the same strategy object for fluent interface pattern
 
 **Persistence:**
 - `save(file_path: str) -> None`
   - Saves current internal schema to JSON file
   - Format matches Schema JSON format (as defined in Hyperparameter Schema section)
 
-- `from_strategy(strategy: AbstractStrategy) -> Autobind` (instance method)
+- `load_from_strategy(strategy: AbstractStrategy) -> Autobind` (instance method)
   - Extracts schema from strategy via strategy.state_dict()
-  - Uses self.schema as base
-  - Merges: strategy schema values overwrite current schema where keys match
+  - Merges into self._schema in place (strategy values overwrite current where keys match)
   - Keys only in current schema remain unchanged
   - Keys only in strategy schema are added
-  - Returns new Autobind instance with merged schema
+  - Returns self for fluent interface
   - Useful for extracting working configurations to share with team/project
 
 **Dependencies**:

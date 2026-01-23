@@ -166,5 +166,8 @@ This report helps maintain visibility and allows the user to review git history 
 
 # Final notes.
 
-- Run tests using wsl at /home/chris/.virtualenvs/DDP-PBT/bin/python for tests, as GLOO needs a linux backend. Remember to switch wsl versions to ubuntu.
+- Run tests using wsl at /home/chris/.virtualenvs/DDP-PBT/bin/python for tests, as GLOO needs a linux backend. Use Ubuntu-24.04 distribution:
+  ```
+  wsl -d Ubuntu-24.04 /home/chris/.virtualenvs/DDP-PBT/bin/python -m pytest tests/ -v
+  ```
 - Do git through windows. 
