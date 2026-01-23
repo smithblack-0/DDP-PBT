@@ -2,8 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.3.4] - 2026-01-23
+
+Add Autobind component with comprehensive fixes.
+
+- Add Autobind class for user-facing configuration with prototype pattern
+- Add autobind_defaults.json with conservative defaults for common optimizers
+- Add comprehensive black-box test suite (46 tests)
+- Fix type conflict validation (raises TypeError when binding log to linear or vice versa)
+- Implement fluent interface (methods return self for chaining)
+- Rename from_strategy to load_from_strategy with in-place mutation behavior
+- Update implementation_plan.md contracts for Autobind component
+- Update claude.md with correct WSL test command (Ubuntu-24.04)
+
+## [0.3.3] - 2026-01-22
+
+Big documentation push
+
+- Lots of automatically generated claude documents
+- Still needs audits.
 
 ## [0.3.2] - 2026-01-21
 
@@ -13,8 +30,7 @@ Code formatting and style cleanup.
 - Fix remaining formatting issues (unused variables, line length)
 
 ## [0.3.1] - 2026-01-21
-
-Post-release fixes and documentation.
+Fixes and documentation.
 
 - Fix AbstractStrategy tests with distributed context fixture
 - Fix TopPopulationSexualStrategy factory to return correct type
