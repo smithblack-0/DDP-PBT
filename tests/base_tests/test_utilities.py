@@ -12,7 +12,13 @@ from typing import Any, Dict, List, Tuple
 
 import pytest
 
-from src.ddp_pbt.base.utilities import patch_pytree, walk_pytree_collection, walk_single_pytree
+from src.ddp_pbt.base.utilities import (
+    flatten_pytree_to_path_dict,
+    patch_pytree,
+    patch_pytree_from_path_dict,
+    walk_pytree_collection,
+    walk_single_pytree,
+)
 
 
 @pytest.fixture
@@ -328,3 +334,95 @@ class TestPatchPytreeContract:
             patch_pytree(patch_base_tree_list, [("99", 1)])
 
         assert "99" in str(excinfo.value)
+
+    def test_patch_pytree_functional_mode_returns_new_dict(
+        self,
+        patch_base_tree_dict: Dict[str, Any],
+    ) -> None:
+        """Patch pytree with inplace=False returns new dict, original unchanged."""
+        original = patch_base_tree_dict.copy()
+        original_id = id(patch_base_tree_dict)
+
+        patched = patch_pytree(patch_base_tree_dict, [("x", 999)], inplace=False)
+
+        assert patched == {"x": 999, "state": {"exp_avg": [10, 20], "step": 3}}
+        assert patch_base_tree_dict == original  # Original unchanged
+        assert id(patched) != original_id  # New object
+
+    def test_patch_pytree_functional_mode_returns_new_list(
+        self,
+        patch_base_tree_list: List[Any],
+    ) -> None:
+        """Patch pytree with inplace=False returns new list, original unchanged."""
+        original = patch_base_tree_list.copy()
+        original_id = id(patch_base_tree_list)
+
+        patched = patch_pytree(patch_base_tree_list, [("0", 999)], inplace=False)
+
+        assert patched == [999, {"k": 2}, 3]
+        assert patch_base_tree_list == original  # Original unchanged
+        assert id(patched) != original_id  # New object
+
+    def test_patch_pytree_functional_mode_tuple_always_returns_new(
+        self,
+        patch_base_tree_tuple: Tuple[Any, ...],
+    ) -> None:
+        """Patch pytree on tuple always returns new (tuples immutable)."""
+        original_id = id(patch_base_tree_tuple)
+
+        patched_inplace = patch_pytree(patch_base_tree_tuple, [("0", 999)], inplace=True)
+        patched_functional = patch_pytree(patch_base_tree_tuple, [("0", 888)], inplace=False)
+
+        # Both return new tuples (tuples are immutable)
+        assert id(patched_inplace) != original_id
+        assert id(patched_functional) != original_id
+
+
+class TestFlattenPytreeToPathDict:
+    """Smoke tests for flatten_pytree_to_path_dict wrapper function."""
+
+    def test_flattens_nested_dict_to_flat_path_dict(self) -> None:
+        """Flatten pytree to path dict converts nested structure to flat dictionary."""
+        tree = {"lr": 0.01, "state": {"exp_avg": 0.9, "step": 1}}
+        result = flatten_pytree_to_path_dict(tree, max_depth=-1)
+
+        assert result == {
+            "lr": 0.01,
+            "state/exp_avg": 0.9,
+            "state/step": 1,
+        }
+
+    def test_respects_max_depth(self) -> None:
+        """Flatten pytree to path dict respects max depth limit."""
+        tree = {"a": {"b": {"c": 1}}}
+        result = flatten_pytree_to_path_dict(tree, max_depth=2)
+
+        assert result == {}  # Depth 3 needed to reach leaf
+
+    def test_returns_empty_dict_for_empty_input(self) -> None:
+        """Flatten pytree to path dict returns empty dict for empty input."""
+        result = flatten_pytree_to_path_dict({}, max_depth=-1)
+        assert result == {}
+
+
+class TestPatchPytreeFromPathDict:
+    """Smoke tests for patch_pytree_from_path_dict wrapper function."""
+
+    def test_patches_values_from_path_dict(self) -> None:
+        """Patch pytree from path dict applies updates from flat dictionary."""
+        tree = {"lr": 0.01, "state": {"exp_avg": 0.9, "step": 1}}
+        updates = {"lr": 0.02, "state/step": 2}
+
+        result = patch_pytree_from_path_dict(tree, updates)
+
+        assert result == {"lr": 0.02, "state": {"exp_avg": 0.9, "step": 2}}
+        assert result is tree  # Mutates in place
+
+    def test_handles_nested_paths(self) -> None:
+        """Patch pytree from path dict handles deeply nested path updates."""
+        tree = {"a": {"b": {"c": 1}}}
+        updates = {"a/b/c": 99}
+
+        result = patch_pytree_from_path_dict(tree, updates)
+
+        assert result == {"a": {"b": {"c": 99}}}

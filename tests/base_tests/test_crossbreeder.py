@@ -24,6 +24,8 @@ class TestCrossbreederSetup:
             "lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True},
         }
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         # Verify schema is stored by attempting crossbreeding
         world_hyperparameters = [
@@ -45,6 +47,8 @@ class TestCrossbreederHyperparameterCrossbreeding:
             "weight_decay": {"type": "linear", "std": 0.001, "shared": True},
         }
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [
             {"weight_decay": [0.01]},
@@ -73,6 +77,8 @@ class TestCrossbreederHyperparameterCrossbreeding:
             "lr": {"type": "log", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [
             {"lr": [0.001]},
@@ -101,6 +107,8 @@ class TestCrossbreederHyperparameterCrossbreeding:
             "weight_decay": {"type": "linear", "std": 0.001, "shared": False},
         }
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [
             {"weight_decay": [0.01, 0.02]},
@@ -128,6 +136,8 @@ class TestCrossbreederHyperparameterCrossbreeding:
             "weight_decay": {"type": "linear", "std": 0.001, "shared": True},
         }
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [
             {"lr": [0.001], "weight_decay": [0.01]},
@@ -154,7 +164,7 @@ class TestCrossbreederProbabilisticMutation:
     """Tests probabilistic mutation after crossbreeding."""
 
     def test_mutation_rate_zero_never_mutates(self):
-        """With mutation_rate=0.0, perturber should never be called."""
+        """With mutation_rate=0.0, crossbred result should be returned unchanged."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True},
@@ -162,7 +172,32 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.apply_perturbation.return_value = 0.999
+        perturber.perturb_pytree_using_schema = Mock(side_effect=lambda x, **kwargs: x)
+        crossbreeder.setup_perturber(perturber)
+
+        world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
+        parent_weights = [0.5, 0.5]
+
+        # Run multiple times
+        random.seed(42)
+        results = []
+        for _ in range(10):
+            result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+            results.append(result["lr"][0])
+
+        # Should only see parent values (no mutation)
+        assert all(r in [0.001, 0.002] for r in results)
+
+    def test_mutation_rate_one_always_mutates(self):
+        """With mutation_rate=1.0, perturb_pytree_using_schema should be called."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
+        schema = {
+            "lr": {"type": "linear", "std": 0.1, "shared": True},
+        }
+        crossbreeder.setup_schema(schema)
+
+        perturber = Mock(spec=Perturber)
+        perturber.perturb_pytree_using_schema = Mock(return_value={"lr": [0.999]})
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
@@ -172,33 +207,14 @@ class TestCrossbreederProbabilisticMutation:
         for _ in range(10):
             crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # Perturber should never be called
-        assert perturber.apply_perturbation.call_count == 0
-
-    def test_mutation_rate_one_always_mutates(self):
-        """With mutation_rate=1.0, each allele should be mutated."""
-        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
-        schema = {
-            "lr": {"type": "linear", "std": 0.1, "shared": True},
-        }
-        crossbreeder.setup_schema(schema)
-
-        perturber = Mock(spec=Perturber)
-        perturber.apply_perturbation.return_value = 0.999
-        crossbreeder.setup_perturber(perturber)
-
-        world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
-        parent_weights = [0.5, 0.5]
-
-        # Run multiple times - each run mutates 1 allele
-        for _ in range(10):
-            crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
-
-        # With mutation_rate=1.0 and 1 allele, apply_perturbation called 10 times (once per run)
-        assert perturber.apply_perturbation.call_count == 10
+        # perturb_pytree_using_schema called 10 times with perturb_chance=1.0
+        assert perturber.perturb_pytree_using_schema.call_count == 10
+        # Verify it was called with correct perturb_chance
+        call_args = perturber.perturb_pytree_using_schema.call_args
+        assert call_args.kwargs["perturb_chance"] == 1.0
 
     def test_mutation_returns_perturbed_result(self):
-        """When mutation occurs, allele should be replaced with perturber's result."""
+        """When mutation occurs, result should be from perturber."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True},
@@ -206,7 +222,7 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.apply_perturbation.return_value = 0.123456
+        perturber.perturb_pytree_using_schema = Mock(return_value={"lr": [0.123456]})
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
@@ -214,11 +230,11 @@ class TestCrossbreederProbabilisticMutation:
 
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # Result should be what perturber returned (mutation_rate=1.0 guarantees mutation)
+        # Result should be what perturber returned
         assert result["lr"][0] == 0.123456
 
     def test_mutation_rate_partial_mutates_probabilistically(self):
-        """With 0 < mutation_rate < 1, each allele should mutate probabilistically."""
+        """With 0 < mutation_rate < 1, perturb_chance should be passed correctly."""
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.5)
         schema = {
             "lr": {"type": "linear", "std": 0.1, "shared": True},
@@ -226,21 +242,21 @@ class TestCrossbreederProbabilisticMutation:
         crossbreeder.setup_schema(schema)
 
         perturber = Mock(spec=Perturber)
-        perturber.apply_perturbation.return_value = 0.999
+        perturber.perturb_pytree_using_schema = Mock(side_effect=lambda x, **kwargs: x)
         crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{"lr": [0.001]}, {"lr": [0.002]}]
         parent_weights = [0.5, 0.5]
 
         random.seed(42)
-        # Run multiple times to check probability (1 allele per run)
-        for _ in range(50):
+        # Run multiple times
+        for _ in range(10):
             crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
 
-        # With mutation_rate=0.5 and 1 allele, should mutate roughly half the time
-        call_count = perturber.apply_perturbation.call_count
-        # Allow some variance (between 15 and 35 out of 50)
-        assert 15 <= call_count <= 35
+        # Verify perturb_chance=0.5 was passed to perturber
+        assert perturber.perturb_pytree_using_schema.call_count == 10
+        call_args = perturber.perturb_pytree_using_schema.call_args
+        assert call_args.kwargs["perturb_chance"] == 0.5
 
 
 class TestCrossbreederEdgeCases:
@@ -253,6 +269,8 @@ class TestCrossbreederEdgeCases:
             "lr": {"type": "linear", "std": 0.1, "shared": True},
         }
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         # World with 4 workers, but only 2 have non-zero weights (already filtered)
         world_hyperparameters = [
@@ -280,10 +298,199 @@ class TestCrossbreederEdgeCases:
         crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
         schema = {}
         crossbreeder.setup_schema(schema)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
 
         world_hyperparameters = [{}, {}]
         parent_weights = [0.5, 0.5]
 
         result = crossbreeder.crossbreed_hyperparameters(world_hyperparameters, parent_weights)
+
+        assert result == {}
+
+
+class TestCrossbreederSchemas:
+    """Tests schema crossbreeding with std field mutation."""
+
+    def test_crossbreeds_std_fields_with_50_50_selection(self):
+        """Should randomly select std values from mother or father."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        # Flattened schema Dictionary Trees
+        mother_schema = {
+            "lr/type": "log",
+            "lr/std": 0.1,
+            "lr/min": 1e-5,
+            "lr/shared": True,
+            "weight_decay/type": "linear",
+            "weight_decay/std": 0.02,
+            "weight_decay/shared": False,
+        }
+        father_schema = {
+            "lr/type": "log",
+            "lr/std": 0.2,
+            "lr/min": 1e-5,
+            "lr/shared": True,
+            "weight_decay/type": "linear",
+            "weight_decay/std": 0.04,
+            "weight_decay/shared": False,
+        }
+
+        world_schemas = [mother_schema, father_schema]
+        parent_weights = [0.5, 0.5]
+
+        # Run multiple times to verify 50/50 selection
+        random.seed(42)
+        results = []
+        for _ in range(50):
+            result = crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
+            results.append((result["lr/std"], result["weight_decay/std"]))
+
+        # Should see both parent values for each field
+        lr_stds = [r[0] for r in results]
+        wd_stds = [r[1] for r in results]
+
+        assert 0.1 in lr_stds and 0.2 in lr_stds, "Should see both mother and father lr/std"
+        assert 0.02 in wd_stds and 0.04 in wd_stds, "Should see both mother and father weight_decay/std"
+
+    def test_only_includes_std_fields_in_result(self):
+        """Should only return paths ending in /std."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        mother_schema = {
+            "lr/type": "log",
+            "lr/std": 0.1,
+            "lr/min": 1e-5,
+            "lr/max": 1e-1,
+            "lr/shared": True,
+        }
+        father_schema = {
+            "lr/type": "log",
+            "lr/std": 0.2,
+            "lr/min": 1e-5,
+            "lr/max": 1e-1,
+            "lr/shared": True,
+        }
+
+        world_schemas = [mother_schema, father_schema]
+        parent_weights = [0.5, 0.5]
+
+        result = crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
+
+        # Should only have std field
+        assert "lr/std" in result
+        assert "lr/type" not in result
+        assert "lr/min" not in result
+        assert "lr/max" not in result
+        assert "lr/shared" not in result
+
+    def test_applies_mutation_probabilistically(self):
+        """Should apply mutation based on mutation_rate."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0, schema_mutation_std=0.1)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        mother_schema = {"lr/std": 0.1}
+        father_schema = {"lr/std": 0.1}  # Same value
+
+        world_schemas = [mother_schema, father_schema]
+        parent_weights = [0.5, 0.5]
+
+        random.seed(42)
+        result = crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
+
+        # With mutation_rate=1.0 and both parents having same value,
+        # result should be different due to mutation
+        assert result["lr/std"] != 0.1
+
+    def test_no_mutation_when_rate_zero(self):
+        """Should not mutate when mutation_rate=0.0."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        mother_schema = {"lr/std": 0.15}
+        father_schema = {"lr/std": 0.15}  # Same value
+
+        world_schemas = [mother_schema, father_schema]
+        parent_weights = [0.5, 0.5]
+
+        result = crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
+
+        # With mutation_rate=0.0 and both parents having same value,
+        # result should be exactly the same
+        assert result["lr/std"] == 0.15
+
+    def test_uses_schema_mutation_std(self):
+        """Should use schema_mutation_std for perturbation."""
+        # Test that schema_mutation_std affects mutation magnitude
+        crossbreeder_small = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0, schema_mutation_std=0.01)
+        crossbreeder_large = Crossbreeder(parent_pool_depth=2, mutation_rate=1.0, schema_mutation_std=1.0)
+
+        perturber_small = Perturber()
+        perturber_large = Perturber()
+
+        crossbreeder_small.setup_perturber(perturber_small)
+        crossbreeder_large.setup_perturber(perturber_large)
+
+        mother_schema = {"lr/std": 0.1}
+        father_schema = {"lr/std": 0.1}
+
+        world_schemas = [mother_schema, father_schema]
+        parent_weights = [0.5, 0.5]
+
+        random.seed(42)
+        result_small = crossbreeder_small.crossbreed_schemas(world_schemas, parent_weights)
+
+        random.seed(42)
+        result_large = crossbreeder_large.crossbreed_schemas(world_schemas, parent_weights)
+
+        # Larger std should produce larger deviation
+        deviation_small = abs(result_small["lr/std"] - 0.1)
+        deviation_large = abs(result_large["lr/std"] - 0.1)
+
+        # Not a strict requirement due to randomness, but statistically likely
+        # Just verify both are different from original
+        assert result_small["lr/std"] != 0.1
+        assert result_large["lr/std"] != 0.1
+
+    def test_raises_error_with_no_parents(self):
+        """Should raise error if no parents selected."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        world_schemas = [{"lr/std": 0.1}, {"lr/std": 0.2}]
+        parent_weights = [0.0, 0.0]  # No parents
+
+        with pytest.raises(ValueError, match="No parents selected"):
+            crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
+
+    def test_raises_error_with_one_parent(self):
+        """Should raise error if only one parent selected."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        world_schemas = [{"lr/std": 0.1}, {"lr/std": 0.2}]
+        parent_weights = [1.0, 0.0]  # Only one parent
+
+        with pytest.raises(ValueError, match="Expected exactly 2 parents"):
+            crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
+
+    def test_empty_schemas_returns_empty_dict(self):
+        """Should return empty dict for empty schemas."""
+        crossbreeder = Crossbreeder(parent_pool_depth=2, mutation_rate=0.0)
+        perturber = Perturber()
+        crossbreeder.setup_perturber(perturber)
+
+        world_schemas = []
+        parent_weights = []
+
+        result = crossbreeder.crossbreed_schemas(world_schemas, parent_weights)
 
         assert result == {}

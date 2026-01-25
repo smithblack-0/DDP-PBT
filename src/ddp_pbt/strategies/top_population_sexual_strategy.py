@@ -16,7 +16,7 @@ evidence will tell.
 
 import math
 import random
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type, Callable
 
 import numpy as np
 import torch
@@ -53,13 +53,15 @@ class TopPopulationSexualStrategy(AbstractStrategy):
     def __init__(
         self,
         num_k: int,
+        crossbreed_schema: bool,
         state: State,
         communication: Communication,
         crossbreeder: Crossbreeder,
         config: Optional[Dict[str, Any]] = None,
     ):
         """
-        :param num_k: Number of k. Cannot be larger than world size.
+        :param num_k: Number of parents to select among. Cannot be larger than world size.
+        :param crossbreed_schema: Whether to crossbreed and mutate the schema stds too.
         :param state: The state object used for optimizer access
         :param communication: The communication objecct used for distributed work
         :param crossbreeder: The object performing primary crossbreeding and mutation
@@ -70,6 +72,7 @@ class TopPopulationSexualStrategy(AbstractStrategy):
         self._crossbreeder.setup_schema(self.schema)
         self._num_k = num_k
         self.root_parent = 0
+        self.crossbreed_schema = crossbreed_schema
 
     def score(
         self,
@@ -158,10 +161,26 @@ class TopPopulationSexualStrategy(AbstractStrategy):
         selection_weights[self.root_parent] = 1.0
         return communication.reduce_by_world_weights(selection_weights, optimizer_pytree)
 
+    def reduce_schema(self,
+                      world_weights: List[float],
+                      schema_closure: Callable[[], Dict[str, Any]],
+                      communication: Communication,
+                      ) ->Optional[Dict[str, Any]]:
+        """
+        Crossbreeds the schema when relevant
+        """
+        if not self.crossbreed_schema:
+            return None
+
+        local_schema = schema_closure()
+        world_schemas = communication.gather_pytree_list(local_schema)
+        schema_updates = self._crossbreeder.crossbreed_schemas(world_schemas, world_weights)
+        return schema_updates
 
 def make_top_population_sexual_strategy(
     reproduction_percentage: float,
     optimizer: Optimizer,
+    crossbreed_schemas: bool = True,
     mutation_rate: float = 0.05,
     max_hyperparameter_search_depth: int = 3,
     communication_class: Type[Communication] = Communication,
@@ -197,6 +216,8 @@ def make_top_population_sexual_strategy(
     :param reproduction_percentage: A number between 0 to 1.0 indicating the top performing
         percentage to allow reproduction on.
     :param optimizer: The optimizer to use for setup.
+    :param crossbreed_schemas: Whether to allow the mutation and crossbreeding of the schema
+        std fields. Defaults to true.
     :param mutation_rate: A number from 0 to 1.0 indicating how frequently to mutate.
         Default is 0.05 or 5%
     :param max_hyperparameter_search_depth: How many layers deep to search each param group for
@@ -216,4 +237,5 @@ def make_top_population_sexual_strategy(
     crossbreeder = Crossbreeder(top_k, mutation_rate)
     crossbreeder.setup_perturber(Perturber())
     state = State(optimizer, max_hyperparameter_search_depth)
-    return TopPopulationSexualStrategy(top_k, state, communicator, crossbreeder, config)
+    return TopPopulationSexualStrategy(top_k, crossbreed_schemas,state,
+                                       communicator, crossbreeder, config)

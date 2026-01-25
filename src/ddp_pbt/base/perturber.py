@@ -7,7 +7,9 @@ linear or log-space, with optional bounds clipping.
 
 import math
 import random
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
+
+from . import utilities
 
 
 class Perturber:
@@ -47,6 +49,10 @@ class Perturber:
         self,
         path: str,
         value: float,
+        default_std: float = None,
+        default_param_type: str = None,
+        default_min_bound: float = None,
+        default_max_bound: float = None,
     ) -> float:
         """
         Applies a perturbation while respecting the necessary
@@ -54,15 +60,33 @@ class Perturber:
 
         :param path: The path for the hyperparameter. Used to look up schema
         :param value: The current value
+        :param default_std: Optional fallback std if path not in schema
+        :param default_param_type: Optional fallback param_type if path not in schema
+        :param default_min_bound: Optional fallback min_bound
+        :param default_max_bound: Optional fallback max_bound
         :return: The new value
-        :raises: If insane config detected.
+        :raises: If insane config detected or invalid defaults provided
         """
-        # Unpack config
-        config = self._schema[path]
-        param_type = config["type"]
-        std = config["std"]
-        min_bound = config.get("min", None)
-        max_bound = config.get("max", None)
+        # Check if defaults provided together
+        if (default_std is None) != (default_param_type is None):
+            raise ValueError("default_std and default_param_type must both be provided or both be None")
+
+        # Try schema lookup first
+        if self._schema is not None and path in self._schema:
+            config = self._schema[path]
+            param_type = config["type"]
+            std = config["std"]
+            min_bound = config.get("min", None)
+            max_bound = config.get("max", None)
+        elif default_std is not None and default_param_type is not None:
+            # Use defaults
+            param_type = default_param_type
+            std = default_std
+            min_bound = default_min_bound
+            max_bound = default_max_bound
+        else:
+            # No schema entry and no defaults - return unchanged
+            return value
 
         # Get random noise
         noise = random.gauss(0, std)
@@ -97,9 +121,10 @@ class Perturber:
 
         return value
 
-    def perturb(
+    def perturb_pytree_using_schema(
         self,
         values: Dict[str, List[float]],
+        perturb_chance: float = 1.0,
     ) -> Dict[str, List[float]]:
         """
         Perturb hyperparameter values with independent normal sampling.
@@ -107,6 +132,7 @@ class Perturber:
         Args:
             values: Hyperparameter values dict. Format: {"param": [val1, val2, ...]}
                    Each list element is perturbed independently.
+            perturb_chance: Probability of applying perturbation (0.0 = never, 1.0 = always)
 
         Returns:
             Perturbed hyperparameter values in same format as input.
@@ -131,9 +157,57 @@ class Perturber:
 
             perturbed_values = []
             for hyperparameter in hyperparameters_list:
-                perturbed_value = self.apply_perturbation(hyperparameter_path, hyperparameter)
+                # Apply perturbation probabilistically
+                if random.random() < perturb_chance:
+                    perturbed_value = self.apply_perturbation(hyperparameter_path, hyperparameter)
+                else:
+                    perturbed_value = hyperparameter
                 perturbed_values.append(perturbed_value)
 
             result[hyperparameter_path] = perturbed_values
+
+        return result
+
+    def perturb_dict_tree_using_defaults(
+        self,
+        dict_tree: Dict[str, Any],
+        std: float,
+        param_type: str,
+        predicate: Callable[[str, Any], bool],
+        perturb_chance: float = 1.0,
+        min_bound: float = None,
+        max_bound: float = None,
+    ) -> Dict[str, Any]:
+        """
+        Perturb Dictionary Tree using provided defaults, filtering with predicate.
+
+        Args:
+            dict_tree: Dictionary Tree to perturb (flat dict with path keys)
+            std: Standard deviation for perturbation
+            param_type: "log" or "linear" perturbation type
+            predicate: Function(path, value) -> bool to filter which paths to perturb
+            perturb_chance: Probability of applying perturbation (0.0 = never, 1.0 = always)
+            min_bound: Optional minimum bound
+            max_bound: Optional maximum bound
+
+        Returns:
+            New Dictionary Tree with perturbed values, input unchanged
+
+        Iterates Dictionary Tree, applies predicate to filter paths, perturbs filtered values
+        using provided std/param_type (ignores schema).
+        """
+        result = {}
+        for path, value in dict_tree.items():
+            if predicate(path, value) and random.random() < perturb_chance:
+                result[path] = self.apply_perturbation(
+                    path,
+                    value,
+                    default_std=std,
+                    default_param_type=param_type,
+                    default_min_bound=min_bound,
+                    default_max_bound=max_bound,
+                )
+            else:
+                result[path] = value
 
         return result

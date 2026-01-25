@@ -100,16 +100,17 @@ def _recursive_walk_pytrees(
 def patch_pytree(
     pytree: PyTree,
     patches: List[PyTreePatch],
+    inplace: bool = True,
 ) -> PyTree:
     """
-    Mutates the pytree to apply the patch
-    A patch is a tuple containing the path,
-    and the new value. You provide the pytree
-    and a list of patches, and it most efficiently
-    rebuilds the tree.
+    Applies patches to pytree, either mutating in place or returning new pytree.
+
+    A patch is a tuple containing the path and the new value.
 
     :param pytree: The pytree to modify
-    :return: The newly rebuild pytree
+    :param patches: List of (path, value) tuples to apply
+    :param inplace: If True, mutates pytree in place. If False, returns new pytree.
+    :return: The patched pytree (same object if inplace=True, new object if inplace=False)
     :raises: If the path does not exist, if trying to change type
     """
 
@@ -174,12 +175,18 @@ def patch_pytree(
 
     # Return. Do necessary conversions
     if isinstance(pytree, dict):
-        pytree.clear()
-        pytree.update(output)
+        if inplace:
+            pytree.clear()
+            pytree.update(output)
+        else:
+            pytree = dict(output)
     elif isinstance(pytree, list):
         update = list(output.values())
-        pytree.clear()
-        pytree.extend(update)
+        if inplace:
+            pytree.clear()
+            pytree.extend(update)
+        else:
+            pytree = update
     elif isinstance(pytree, tuple):
         pytree = tuple(output.values())
     else:
@@ -224,3 +231,42 @@ def walk_single_pytree(
     # We just use recursive walk, then remove the list.
     for path, leaf_list in _recursive_walk_pytrees([pytree], max_depth, None):
         yield path, leaf_list[0]
+
+def flatten_pytree_to_path_dict(pytree: PyTree,
+                                max_depth: int = 3
+                                ) -> Dict[str, Any]:
+    """
+    Flattens a portion of the pytree within range into a
+    single flat PathTreeDictionary, in which the keys
+    are the path through the pytree and the values are
+    the observed feature at that location.
+
+    :param pytree: The pytree to walk
+    :param max_depth: The max depth to walk to
+    :return: The PyTreeDict
+    """
+    output = {}
+    for key, value in walk_single_pytree(pytree, max_depth):
+        output[key] = value
+    return output
+
+def patch_pytree_from_path_dict(
+                                pytree: PyTree,
+                                dict_tree: Dict[str, Any],
+                                inplace: bool = True,
+                                )->PyTree:
+    """
+    Takes the converted dict tree from some event, in
+    terms of the terms left over, and patches them into the
+    pytree.
+
+    :param pytree: The pytree to patch
+    :param dict_tree: The dict to patch into place. Each entry is a patch
+    :param inplace: If True, mutates pytree in place. If False, returns new pytree.
+    :return: The patched pytree (same object if inplace=True, new if inplace=False)
+    """
+
+    patches = []
+    for key, value in dict_tree.items():
+        patches.append((key, value))
+    return patch_pytree(pytree, patches, inplace=inplace)

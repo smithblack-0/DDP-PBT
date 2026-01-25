@@ -25,7 +25,6 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.01)
 strategy = make_top_score_strategy(optimizer)
 autobind = Autobind()  # Loads defaults for lr, weight_decay, etc.
 autobind.bind_log_hyperparameter("lr", min=1e-6)  # Just tweak min bound
-autobind.bind_log_hyperparameter("weight_decay", max=0.05)  # Just tweak max bound
 strategy = autobind(strategy)  # Apply configuration
 
 # Training loop - user manages rounds
@@ -270,13 +269,31 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 
 **Interface**:
 - `setup_schema(schema)` → configure perturbation behavior (type, std, bounds)
-- `perturb(values)` → returns perturbed Hyperparameter Values dict
+- `perturb_pytree_using_schema(values, perturb_chance=1.0)` → returns new perturbed pytree
   - Perturbs each list element independently (separate random draws per element)
+  - Applies perturbation probabilistically based on perturb_chance (0.0 = never, 1.0 = always)
   - Additive perturbation: samples normal(0, std) and adds to current value
   - For log parameters: converts to log-space, adds sample, converts back
   - For linear parameters: adds sample directly
   - Clips to bounds after perturbation to ensure valid structures
   - Same schema config applies to entire list for that hyperparameter
+  - Returns new pytree, input unchanged
+- `perturb_dict_tree_using_defaults(dict_tree, std, param_type, predicate, perturb_chance=1.0, min_bound=None, max_bound=None)` → returns new Dictionary Tree
+  - Takes Dictionary Tree (flat dict with path string keys)
+  - Filters paths based on predicate(path, value)
+  - For filtered paths: applies perturbation using provided std/param_type (ignores schema)
+  - Applies perturbation probabilistically based on perturb_chance
+  - Both std and param_type are required parameters
+  - For log param_type: min_bound required and must be > 0, max_bound optional
+  - For linear param_type: both bounds optional
+  - Returns new Dictionary Tree, input unchanged
+- `apply_perturbation(path, value, default_std=None, default_param_type=None, default_min_bound=None, default_max_bound=None)` → returns perturbed value
+  - If path exists in schema: uses schema configuration (default parameters ignored)
+  - If path not in schema and defaults not provided: returns value unchanged (no perturbation)
+  - If path not in schema but default_std and default_param_type provided: uses defaults to perturb
+  - Both default_std and default_param_type required together when providing defaults
+  - For log default_param_type: default_min_bound required and must be > 0
+  - Enables perturbing values without schema entries by providing fallback configuration 
 
 **Dependencies**:
 - Schema (held as reference after setup_schema called)
@@ -290,7 +307,8 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 
 **Stateful configuration**:
 - `parent_pool_depth` (int): Number of top workers to draw parents from
-- `mutation_rate` (float): Probability of calling perturber on crossbred result before returning
+- `mutation_rate` (float): Probability of applying mutation after crossbreeding (applies to both hyperparameters and schema)
+- `schema_mutation_std` (float): Standard deviation for perturbing schema fields (default 0.1 for ~10% proportional variation)
 
 **Interface**:
 1. `setup_schema(schema)` → configure blending behavior for hyperparameters (takes Schema)
@@ -302,11 +320,17 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 4. `crossbreed_hyperparameters(world_hyperparameters, parent_weights)` → returns Hyperparameter Values
    - Takes World Hyperparameters and parent World Weights
    - Interprets parent_weights to find 2 active indices
-   - Blends those two hyperparameter sets with 50% each.
+   - Blends those two hyperparameter sets with 50% each
    - For log parameters: converts to log-space, blends, converts back
    - For linear parameters: blends directly
-   - With mutation_rate probability: calls perturber on result
+   - Calls perturber.perturb_pytree_using_schema with perturb_chance=mutation_rate
    - Returns blended (possibly mutated) Hyperparameter Values
+5. `crossbreed_schemas(world_schemas, parent_weights)` → returns Dictionary Tree of schema updates
+   - Takes list of schema Dictionary Trees from all workers and parent World Weights
+   - Interprets parent_weights to find 2 active indices
+   - Blends filtered fields with 50% selection from each parent. Only std entries can be permuted.
+   - Calls perturber.perturb_dict_tree_using_defaults with std=schema_mutation_std, param_type="log", perturb_chance=mutation_rate
+   - Returns Dictionary Tree with crossbred schema field values
 
 **Pattern**:
 - select_parents produces filtered World Weights
@@ -395,7 +419,8 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 4. Call abstract `reduce_hyperparameters(world_weights, world_hyperparameters, communication)` → returns Hyperparameter Values
 5. Call abstract `reduce_models(world_weights, model_pytree, communication)` → returns updated model pytree
 6. Call abstract `reduce_optimizer(world_weights, optimizer_pytree, communication)` → returns updated optimizer pytree
-7. Inject results back via State
+7. Call `reduce_schema(world_weights, schema_closure, communication)` → returns Dictionary Tree of schema updates or None
+8. Inject results back via State; if reduce_schema returned updates, patch them into schema
 
 **Abstract methods** (concrete strategies must implement all 4 coherently):
 - `score(validation_metrics, communication)` → World Weights
@@ -404,6 +429,15 @@ A list of Hyperparameter Values, one per world. Used to represent hyperparameter
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)` → updated optimizer Tensor PyTree
 
 **Pattern**: These 4 methods are one coherent algorithm, must be implemented together. Communication passed as parameter to each method. Strategies never access State directly.
+
+**Optional method** (strategies can override for metagenetic schema evolution):
+- `reduce_schema(world_weights, schema_closure, communication)` → Dictionary Tree of schema updates or None
+  - Called during step() after the 4 reduction methods
+  - Default implementation returns None (no schema mutation)
+  - Strategies can override to enable schema evolution (e.g., mutating std values)
+  - Receives closure to retrieve schema Dictionary Tree through. When not invoked, does not use resources
+  - Returns Dictionary Tree with path-to-value updates (e.g., `{"lr/std": 0.12}`) or None to skip
+  - Returned updates are patched into schema by AbstractStrategy
 
 **Dependencies**:
 - State (injected) - for extraction/injection
@@ -562,7 +596,10 @@ Notably, the next model and optimizer state is chosen essentially
 at random instead. 
 
 
-**Dependencies**: Crossbreeder (injected with parent_pool_depth, mutation_rate configs)
+**Configuration**:
+- `crossbreed_schema` (bool): Enable/disable schema evolution (default True)
+
+**Dependencies**: Crossbreeder (injected with parent_pool_depth, mutation_rate, schema_mutation_std configs)
 
 **Implementation**:
 - `score(validation_metrics, communication)`:
@@ -583,6 +620,14 @@ at random instead.
 - `reduce_optimizer(world_weights, optimizer_pytree, communication)`:
   - Loop up parent choice
   - Use communication.reduce_by_world_weights(world_weights, optimizer_pytree)
+
+- `reduce_schema(world_weights, schema_closure, communication)`:
+  - If crossbreed_schema flag disabled: returns None
+  - Invokes schema_closure to get flattened schema Dictionary Tree
+  - Gathers schemas from all workers via communication
+  - Filters to mutable fields (paths ending in "/std")
+  - Calls Crossbreeder.crossbreed_schemas with mutable_fields=[("std", "log")]
+  - Returns Dictionary Tree of schema updates (or None if flag disabled)
 
 ---
 

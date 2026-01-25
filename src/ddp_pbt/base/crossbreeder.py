@@ -24,6 +24,7 @@ class Crossbreeder:
         self,
         parent_pool_depth: int,
         mutation_rate: float,
+        schema_mutation_std: float = 0.1,
     ):
         """
         Initialize Crossbreeder with configuration.
@@ -31,9 +32,11 @@ class Crossbreeder:
         Args:
             parent_pool_depth: Number of top workers to draw parents from.
             mutation_rate: Probability of mutating crossbred result (0.0 to 1.0).
+            schema_mutation_std: Standard deviation for schema field perturbation (default 0.1).
         """
         self._parent_pool_depth = parent_pool_depth
         self._mutation_rate = mutation_rate
+        self._schema_mutation_std = schema_mutation_std
         self._schema = None
         self._perturber = None
 
@@ -176,8 +179,64 @@ class Crossbreeder:
                 child_allele_group = self.crossbreed_alleles(
                     allele_key, mother_allele_group, father_allele_group
                 )
-                child_allele_group = self.mutate_alleles(allele_key, child_allele_group)
             else:
                 raise RuntimeError(f"Attempt to crossbreed unconfigured schema: {allele_key}")
             result[allele_key] = child_allele_group
+
+        # Apply mutation probabilistically via perturber
+        result = self._perturber.perturb_pytree_using_schema(result, perturb_chance=self._mutation_rate)
+
+        return result
+
+    def crossbreed_schemas(
+        self,
+        world_schemas: List[Dict[str, Any]],
+        parent_weights: List[float],
+    ) -> Dict[str, Any]:
+        """
+        Crossbreed schema std fields from two parents with probabilistic mutation.
+
+        Args:
+            world_schemas: List of schema Dictionary Trees from all workers.
+            parent_weights: World weights (most entries zero, 2 non-zero for parents).
+
+        Returns:
+            Dictionary Tree of schema updates for std fields.
+        """
+        if not world_schemas:
+            return {}
+
+        # Extract non-zero parent indices
+        parents = [i for i, w in enumerate(parent_weights) if w > 0]
+
+        if len(parents) == 0:
+            raise ValueError("No parents selected (all weights are zero)")
+        if len(parents) != 2:
+            raise ValueError(f"Expected exactly 2 parents, got {len(parents)}")
+
+        mother_index, father_index = parents
+        mother_schema = world_schemas[mother_index]
+        father_schema = world_schemas[father_index]
+
+        # Crossbreed std fields with 50/50 selection
+        result = {}
+        for path in mother_schema.keys():
+            if path.endswith("/std"):
+                mother_value = mother_schema[path]
+                father_value = father_schema[path]
+                result[path] = random.choice([mother_value, father_value])
+
+        # Apply mutation
+        def is_std_field(path: str, value: Any) -> bool:
+            return path.endswith("/std")
+
+        result = self._perturber.perturb_dict_tree_using_defaults(
+            result,
+            std=self._schema_mutation_std,
+            param_type="log",
+            predicate=is_std_field,
+            perturb_chance=self._mutation_rate,
+            min_bound=1e-10,
+        )
+
         return result
