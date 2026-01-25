@@ -107,7 +107,7 @@ class TopKStrategy(AbstractStrategy):
         # hyperparameters
         winner_index = world_weights.index(1.0)
         winner_hyperparams = world_hyperparameters[winner_index]
-        return self._perturber.perturb(winner_hyperparams)
+        return self._perturber.perturb_pytree_using_schema(winner_hyperparams)
 
     def reduce_models(
         self,

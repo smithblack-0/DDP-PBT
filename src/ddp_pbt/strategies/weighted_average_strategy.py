@@ -112,7 +112,7 @@ class WeightedAverageStrategy(AbstractStrategy):
             result[key] = new_subgenome.tolist()
 
         # Perturb and return
-        result = self._perturber.perturb(result)
+        result = self._perturber.perturb_pytree_using_schema(result)
         return result
 
     def reduce_models(

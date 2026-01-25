@@ -99,7 +99,7 @@ class TopScoreStrategy(AbstractStrategy):
         winner_hyperparams = world_hyperparameters[winner_index]
 
         # Perturb for next round variation
-        return self._perturber.perturb(winner_hyperparams)
+        return self._perturber.perturb_pytree_using_schema(winner_hyperparams)
 
     def reduce_models(
         self,

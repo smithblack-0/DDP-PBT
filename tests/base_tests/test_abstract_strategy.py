@@ -363,3 +363,229 @@ class TestAbstractStrategyOrchestration:
         # Verify communication was passed to all four methods
         assert len(strategy.comm_passed) == 4
         assert all(c is communication for c in strategy.comm_passed)
+
+
+class TestAbstractStrategyReduceSchema:
+    """Tests for the reduce_schema hook in step orchestration."""
+
+    def test_reduce_schema_not_called_when_using_default_implementation(self):
+        """reduce_schema should not be invoked when strategy uses default implementation."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.valid_hyperparameter_paths = ["lr"]
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.randn(3, 3)}
+        state.get_optimizer_tensors.return_value = {"state1": torch.randn(3, 3)}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.return_value = [{"lr": [0.001]}]
+
+        strategy = ConcreteTestStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
+
+        # Spy on reduce_schema to verify it returns None
+        original_reduce_schema = strategy.reduce_schema
+        reduce_schema_called = []
+
+        def spy_reduce_schema(*args, **kwargs):
+            result = original_reduce_schema(*args, **kwargs)
+            reduce_schema_called.append(result)
+            return result
+
+        strategy.reduce_schema = spy_reduce_schema
+
+        # Call step
+        strategy.step(0.95)
+
+        # Verify reduce_schema was called but returned None (default behavior)
+        assert len(reduce_schema_called) == 1
+        assert reduce_schema_called[0] is None
+
+        # Verify schema unchanged (state.set_hyperparam_values called but no schema patching)
+        assert strategy.schema == {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+
+    def test_reduce_schema_called_when_overridden(self):
+        """reduce_schema should be invoked when strategy overrides it."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.valid_hyperparameter_paths = ["lr"]
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.randn(3, 3)}
+        state.get_optimizer_tensors.return_value = {"state1": torch.randn(3, 3)}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.return_value = [{"lr": [0.001]}]
+
+        class OverrideStrategy(ConcreteTestStrategy):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.reduce_schema_called = False
+                self.reduce_schema_args = None
+
+            def reduce_schema(self, world_weights, schema_closure, communication):
+                self.reduce_schema_called = True
+                self.reduce_schema_args = (world_weights, schema_closure, communication)
+                return None  # Return None for this test
+
+        strategy = OverrideStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
+
+        # Call step
+        strategy.step(0.95)
+
+        # Verify reduce_schema was called
+        assert strategy.reduce_schema_called is True
+        assert strategy.reduce_schema_args is not None
+
+    def test_reduce_schema_receives_correct_arguments(self):
+        """reduce_schema should receive world_weights, schema_closure, and communication."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.valid_hyperparameter_paths = ["lr"]
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.randn(3, 3)}
+        state.get_optimizer_tensors.return_value = {"state1": torch.randn(3, 3)}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.return_value = [{"lr": [0.001]}, {"lr": [0.002]}]
+
+        class CaptureArgsStrategy(ConcreteTestStrategy):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.captured_world_weights = None
+                self.captured_schema_closure = None
+                self.captured_communication = None
+
+            def reduce_schema(self, world_weights, schema_closure, communication):
+                self.captured_world_weights = world_weights
+                self.captured_schema_closure = schema_closure
+                self.captured_communication = communication
+                return None
+
+        strategy = CaptureArgsStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
+
+        # Call step
+        strategy.step(0.95)
+
+        # Verify arguments
+        assert strategy.captured_world_weights is not None
+        assert callable(strategy.captured_schema_closure)
+        assert strategy.captured_communication is communication
+
+    def test_reduce_schema_closure_returns_flattened_schema(self):
+        """Invoking the schema_closure should return flattened Dictionary Tree."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.valid_hyperparameter_paths = ["lr"]
+        state.max_depth = 3
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.randn(3, 3)}
+        state.get_optimizer_tensors.return_value = {"state1": torch.randn(3, 3)}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.return_value = [{"lr": [0.001]}]
+
+        class InvokeClosureStrategy(ConcreteTestStrategy):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.flat_schema = None
+
+            def reduce_schema(self, world_weights, schema_closure, communication):
+                self.flat_schema = schema_closure()
+                return None
+
+        strategy = InvokeClosureStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
+
+        # Call step
+        strategy.step(0.95)
+
+        # Verify closure returns flattened schema (Dictionary Tree format)
+        assert strategy.flat_schema == {
+            "lr/type": "log",
+            "lr/std": 0.1,
+            "lr/min": 1e-5,
+            "lr/shared": True,
+        }
+
+    def test_reduce_schema_patches_updates_into_schema(self):
+        """Returned Dictionary Tree updates should be patched into schema."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.valid_hyperparameter_paths = ["lr"]
+        state.max_depth = 3
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.randn(3, 3)}
+        state.get_optimizer_tensors.return_value = {"state1": torch.randn(3, 3)}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.return_value = [{"lr": [0.001]}]
+
+        class ReturnUpdatesStrategy(ConcreteTestStrategy):
+            def reduce_schema(self, world_weights, schema_closure, communication):
+                # Return update to std field
+                return {"lr/std": 0.2}
+
+        strategy = ReturnUpdatesStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
+
+        # Call step
+        strategy.step(0.95)
+
+        # Verify schema was updated
+        assert strategy.schema["lr"]["std"] == 0.2
+        # Other fields unchanged
+        assert strategy.schema["lr"]["type"] == "log"
+        assert strategy.schema["lr"]["min"] == 1e-5
+
+    def test_reduce_schema_none_return_skips_patching(self):
+        """Returning None from reduce_schema should skip schema patching."""
+        params = [torch.nn.Parameter(torch.randn(3, 3))]
+        optimizer = torch.optim.Adam(params, lr=0.001)
+
+        state = Mock(spec=State)
+        state.optimizer = optimizer
+        state.valid_hyperparameter_paths = ["lr"]
+        state.get_hyperparam_values.return_value = {"lr": [0.001]}
+        state.get_model_tensors.return_value = {"param1": torch.randn(3, 3)}
+        state.get_optimizer_tensors.return_value = {"state1": torch.randn(3, 3)}
+
+        communication = Mock(spec=Communication)
+        communication.gather_pytree_list.return_value = [{"lr": [0.001]}]
+
+        class ReturnNoneStrategy(ConcreteTestStrategy):
+            def reduce_schema(self, world_weights, schema_closure, communication):
+                return None
+
+        strategy = ReturnNoneStrategy(
+            state, communication, {"lr": {"type": "log", "std": 0.1, "min": 1e-5, "shared": True}}
+        )
+
+        original_schema = strategy.schema.copy()
+
+        # Call step
+        strategy.step(0.95)
+
+        # Verify schema unchanged
+        assert strategy.schema == original_schema
